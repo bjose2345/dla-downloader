@@ -1,0 +1,56 @@
+.welcome{min-height:100vh;display:flex;flex-direction:column}
+.welcome-top{display:flex;justify-content:flex-end;align-items:center;gap:16px;padding:14px 22px;min-height:68px}
+.welcome-top .connection{margin-right:auto}
+.welcome-main{flex:1;width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 20px 12vh}
+/* A fixed box: kana, Hangul and Cyrillic fall back to fonts with other line
+metrics, and a growing word must never move the fields below. */
+.welcome-title{font-size:clamp(38px,min(6.5vw,9vh),64px);font-weight:750;letter-spacing:-2px;margin:26px 0 30px;height:1.35em;line-height:1.35em;width:100%;display:flex;align-items:center;justify-content:center;overflow:visible;white-space:nowrap;color:var(--ink)}
+.caret{display:inline-block;width:.06em;height:.88em;margin-left:.07em;vertical-align:-.07em;background:var(--blue);border-radius:2px;animation:blink 1.05s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+/* An explicit width: a percentage here fell back to the input's intrinsic
+size, so the fields grew and shrank with the typed greeting. */
+.welcome-form{width:340px;max-width:100%;position:relative}
+.welcome-fields{display:flex;flex-direction:column;gap:10px}
+.welcome-fields input{height:50px;padding:0 16px;border-radius:12px;font-size:15px;background:var(--surface);border:1px solid var(--input-border);transition:border-color .15s,box-shadow .15s}
+.welcome-fields input:focus-visible{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px color-mix(in srgb,var(--blue) 25%,transparent)}
+.welcome-fields input[aria-invalid=true]{border-color:var(--red)}
+.welcome-fields input[aria-invalid=true]:focus-visible{box-shadow:0 0 0 3px color-mix(in srgb,var(--red) 22%,transparent)}
+.welcome-fields input:disabled{opacity:.7}
+.password-field{position:relative}
+.password-field input{padding-right:58px}
+.go{position:absolute;right:6px;top:6px;width:38px;height:38px;padding:0;border-radius:10px;background:var(--blue);color:#fff}
+.go:hover:not(:disabled){background:var(--blue-dark)}
+.go:disabled{opacity:.35}
+:root[data-theme=dark] .go{background:#2f6fe0}
+/* Out of the flow, so a message never moves the logo, greeting or fields. */
+.welcome-problem{position:absolute;top:100%;left:2px;right:2px;display:flex;align-items:flex-start;gap:8px;margin:14px 0 0;color:var(--red);font-size:13px;line-height:1.45}
+.welcome-problem svg{flex-shrink:0;margin-top:1px}
+.welcome-foot{display:flex;justify-content:center;padding:0 20px 28px}
+/* The way in without an account: a pill with a round arrow badge. */
+.guest-pill{position:relative;overflow:hidden;isolation:isolate;display:inline-flex;align-items:center;gap:10px;padding:5px 18px 5px 5px;border-radius:999px;background:var(--surface);border:1px solid var(--border);color:var(--muted);font-size:14px;font-weight:600;box-shadow:0 1px 3px #0000000f;transition:color .2s,border-color .2s,box-shadow .25s}
+.guest-pill:hover{color:var(--ink);border-color:color-mix(in srgb,var(--blue) 50%,var(--border));box-shadow:0 8px 24px color-mix(in srgb,var(--blue) 20%,transparent)}
+.guest-pill:focus-visible{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px color-mix(in srgb,var(--blue) 25%,transparent)}
+/* A soft light that sweeps across once on hover. */
+.guest-pill::after{content:"";position:absolute;inset:0;z-index:-1;background:linear-gradient(105deg,transparent 35%,color-mix(in srgb,var(--blue) 14%,transparent) 50%,transparent 65%);transform:translateX(-110%);pointer-events:none}
+.guest-pill:hover::after{transform:translateX(110%);transition:transform .75s ease}
+.guest-pill-icon{position:relative;display:grid;place-items:center;flex:0 0 28px;width:28px;height:28px;border-radius:50%;overflow:hidden;background:var(--accent-soft);color:var(--blue);transition:background .2s,color .2s}
+.guest-pill-icon>span{position:absolute;inset:0;display:grid;place-items:center;line-height:0}
+.guest-pill:hover .guest-pill-icon{background:var(--blue);color:#fff}
+:root[data-theme=dark] .guest-pill:hover .guest-pill-icon{background:#2f6fe0}
+
+@media(prefers-reduced-motion:reduce){
+  .caret,.spinner,.spinning{animation:none}
+  .guest-pill:hover::after{transition:none;transform:translateX(-110%)}
+}
+/* "Forgot password?" under the sign-in fields, and the recovery steps. */
+.forgot-link{display:block;margin:10px 0 0 auto;font-size:13px}
+.recovery{width:340px;max-width:100%;display:flex;flex-direction:column;align-items:stretch;gap:12px;margin-top:22px}
+.recovery h2{margin:0;font-size:18px;text-align:center}
+.recovery form{display:flex;flex-direction:column;gap:12px}
+.recovery-lead,.recovery-hint,.recovery-note{margin:0;font-size:13px;color:var(--muted);line-height:1.45}
+.recovery-main{height:46px;border-radius:12px}
+.recovery-problem,.recovery-done{display:flex;align-items:flex-start;gap:8px;margin:0;font-size:13px;line-height:1.45}
+.recovery-problem{color:var(--red)}
+.recovery-done{color:var(--success-ink)}
+.recovery-problem svg,.recovery-done svg{flex-shrink:0;margin-top:1px}
+.recovery .text-button{align-self:center}

@@ -1,0 +1,76 @@
+:root{color-scheme:light;--ink:#14273d;--muted:#596b7e;--blue:#185bd6;--blue-dark:#1148b0;--border:#dce4ed;--canvas:#f4f7fb;--red:#ad3040;--green:#137653;--surface:#fff;--surface-muted:#edf2f9;--surface-soft:#fafcff;--accent-soft:#eaf1ff;--input-border:#ced8e4;--hover:#f1f6fe;--banner:#e7eefc;--banner-text:#264b86;--error-bg:#fff5f6;--error-ink:#922a38;--success-bg:#eaf6f0;--success-ink:#146847;--warning-bg:#fff3ed;--warning-ink:#953f21;--track:#e7edf5;--scroll-thumb:#c3cdda;--scroll-thumb-hover:#94a3b8}
+:root[data-theme=dark]{color-scheme:dark;--ink:#e6edf7;--muted:#a3b2c8;--blue:#8bb6ff;--blue-dark:#adcaff;--border:#304057;--canvas:#0f1726;--red:#ffabb4;--green:#75d7b1;--surface:#192438;--surface-muted:#223148;--surface-soft:#142034;--accent-soft:#233959;--input-border:#43516a;--hover:#283c59;--banner:#1b2c48;--banner-text:#bed5ff;--error-bg:#38232e;--error-ink:#ffc2c9;--success-bg:#19392f;--success-ink:#9fe7c9;--warning-bg:#3b2e21;--warning-ink:#ffd4a9;--track:#304057;--scroll-thumb:#3a4960;--scroll-thumb-hover:#5a6b85}
+*{box-sizing:border-box}
+/* Japanese fonts come before the system fallback: without them WebView2 on an
+English Windows takes some kanji from a Chinese font, mixing two styles. */
+/* The scrollbar keeps its place, so locking the page behind a dialog does not shift it. */
+html{scrollbar-gutter:stable}
+html.scroll-locked{overflow:hidden}
+body{margin:0;background:var(--canvas);color:var(--ink);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI","Yu Gothic UI","Yu Gothic",Meiryo,"Hiragino Sans","Hiragino Kaku Gothic ProN","Noto Sans CJK JP","Noto Sans JP",sans-serif;font-size:16px;line-height:1.5}
+button,input,select{font:inherit}
+button,a,input,select,summary{outline-offset:4px}
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,summary:focus-visible{outline:3px solid #6da4ff}
+button{cursor:pointer;border:0;border-radius:9px;padding:12px 18px;font-weight:600;transition:background .15s,color .15s;display:inline-flex;align-items:center;justify-content:center;gap:8px}
+button:disabled{opacity:.45;cursor:not-allowed}
+button span{margin-left:0}
+.primary{background:var(--blue);color:#fff}
+.primary:hover:not(:disabled){background:var(--blue-dark)}
+.secondary{background:var(--surface);color:var(--ink);border:1px solid var(--input-border)}
+.secondary:hover:not(:disabled){background:var(--hover)}
+.text-button{background:transparent;color:var(--muted);padding-inline:12px}
+main{max-width:1216px;margin:0 auto;padding:45px 36px 22px}
+.eyebrow{font-size:12px;letter-spacing:.14em;font-weight:700;color:var(--blue)}
+h1{font-size:34px;font-weight:650;letter-spacing:-1.2px;line-height:1.25;margin:12px 0}
+h2{font-size:17px;margin:0;font-weight:650;letter-spacing:-.2px}
+label{display:block;margin:20px 0 7px;font-size:14px;font-weight:600}
+input:not([type=file]),select{width:100%;border:1px solid var(--input-border);border-radius:8px;padding:11px 12px;background:var(--surface);color:var(--ink);min-width:0}
+input::placeholder{color:#8392a3}
+.muted{color:var(--muted);font-size:14px}
+h3{font-size:18px;font-weight:650;margin:13px 0 0;letter-spacing:-.3px}
+.drop-hint{font-size:12px;color:var(--muted);margin-top:14px}
+.file-icon{display:grid;place-items:center;height:39px;border-radius:7px;background:var(--surface-muted);font-size:11px;font-weight:700;color:var(--blue)}
+.file-name{font-size:14px;font-weight:550;overflow-wrap:anywhere}
+.file-meta{font-size:12px;color:var(--muted);margin-top:3px}
+progress{display:block;appearance:none;border:0;width:100%;height:5px;margin-top:9px;border-radius:10px;overflow:hidden;background:var(--track)}
+progress::-webkit-progress-bar{background:var(--track)}
+progress::-webkit-progress-value{background:var(--blue)}
+progress::-moz-progress-bar{background:var(--blue)}
+.notice{padding:13px 17px;border:1px solid var(--red);border-radius:9px;background:var(--error-bg);color:var(--error-ink);margin-bottom:20px;font-size:14px;overflow-wrap:anywhere}
+footer{display:flex;justify-content:space-between;gap:15px;font-size:12px;color:var(--muted);margin-top:26px;padding:0 2px}
+[hidden]{display:none!important}
+:root[data-theme=dark] .primary{background:#2865cc;color:#fff}
+:root[data-theme=dark] .primary:hover:not(:disabled){background:#3978e0}
+a{color:var(--blue)}
+.notice.info{border-color:var(--blue);background:var(--accent-soft);color:var(--ink)}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.circle{font-size:12px;color:var(--muted)}
+.work-code{display:inline-block;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:12px;font-weight:600;color:var(--blue);margin-right:8px}
+button.compact{padding:6px 11px;font-size:13px;white-space:nowrap}
+.link{background:transparent;color:var(--blue);padding:0;font-weight:500;text-decoration:underline;text-underline-offset:3px}
+.icon-button{width:40px;height:40px;padding:0;border-radius:999px;background:var(--surface-muted);color:var(--muted);border:1px solid var(--border)}
+.icon-button:hover{color:var(--ink);background:var(--hover)}
+.icon-button.small{width:30px;height:30px;background:transparent;border-color:transparent}
+.icon-button.small:hover{background:var(--hover)}
+.notice.compact{margin:14px 0 0;padding:10px 13px;overflow:hidden}
+.spinning{animation:spin 1s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.spinner{width:16px;height:16px;border-radius:50%;border:2px solid #ffffff66;border-top-color:#fff;animation:spin .8s linear infinite}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-track,::-webkit-scrollbar-corner{background:transparent}
+::-webkit-scrollbar-button{display:none;width:0;height:0}
+::-webkit-scrollbar-thumb{background:var(--scroll-thumb);background-clip:padding-box;border:3px solid transparent;border-radius:999px;min-height:40px}
+::-webkit-scrollbar-thumb:hover,::-webkit-scrollbar-thumb:active{background:var(--scroll-thumb-hover);background-clip:padding-box;border-width:2px}
+
+@media(max-width:900px){
+  main{padding-inline:24px}
+}
+
+@media(max-width:660px){
+  main{padding:28px 20px}
+  h1{font-size:29px}
+  footer{flex-direction:column;gap:6px}
+}
+
+@media(prefers-reduced-motion:reduce){
+  *{transition:none!important}
+}

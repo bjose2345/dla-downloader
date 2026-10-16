@@ -1,0 +1,52 @@
+/* Settings */
+.settings-backdrop{position:fixed;inset:0;z-index:40;background:#0b1422a6;backdrop-filter:blur(2px)}
+.settings-panel{position:fixed;top:0;right:0;bottom:0;z-index:41;width:min(460px,100%);background:var(--canvas);border-left:1px solid var(--border);box-shadow:-18px 0 50px #00000030;display:flex;flex-direction:column;outline:none}
+.settings-head{display:flex;justify-content:space-between;align-items:center;padding:20px 22px;border-bottom:1px solid var(--border)}
+.settings-head h2{font-size:20px}
+.settings-body{overflow:auto;padding:8px 22px 30px}
+.settings-section{padding:20px 0;border-bottom:1px solid var(--border)}
+.settings-section:last-child{border-bottom:0}
+.settings-section-head{display:flex;gap:12px;align-items:flex-start;margin-bottom:14px}
+.settings-section-head h3{margin:0;font-size:15px}
+.settings-section-head p{margin:3px 0 0;font-size:13px;color:var(--muted)}
+.settings-mark{display:grid;place-items:center;width:34px;height:34px;flex-shrink:0;border-radius:10px;background:var(--accent-soft);color:var(--blue)}
+.locale-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.locale-option{justify-content:flex-start;background:var(--surface);border:1px solid var(--border);color:var(--ink);padding:9px 12px;border-radius:10px;font-weight:500;font-size:14px}
+.locale-option:hover{background:var(--hover)}
+.locale-option.current{border-color:var(--blue);box-shadow:0 0 0 1px var(--blue) inset;background:var(--accent-soft)}
+.locale-flag{width:22px;height:22px;flex-shrink:0;border-radius:50%;box-shadow:0 0 0 1px #00000018}
+.choice-row{display:flex;gap:6px;background:var(--surface-muted);border:1px solid var(--border);padding:4px;border-radius:12px;margin-bottom:12px}
+.choice{flex:1;background:transparent;color:var(--muted);padding:8px 10px;border-radius:9px;font-size:14px}
+.choice.current{background:var(--surface);color:var(--ink);box-shadow:0 1px 5px #0000001a}
+/* Zoom: a labelled row of levels between the theme and the motion switch. */
+.zoom-setting{display:flex;flex-direction:column;gap:2px;margin-bottom:4px}
+.zoom-setting .choice-row{margin-top:8px}
+.zoom-setting .choice{padding:8px 4px;font-variant-numeric:tabular-nums}
+.folder-setting{display:flex;flex-direction:column;gap:6px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 14px}
+.folder-path{font-size:13px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;overflow-wrap:anywhere}
+.folder-path.muted{font-family:inherit}
+.folder-actions{display:flex;gap:6px;margin-top:4px}
+.about-list{display:grid;grid-template-columns:auto 1fr;gap:6px 16px;margin:0;font-size:13px}
+.about-list dt{color:var(--muted)}
+.about-list dd{margin:0}
+.tone-ready{color:var(--green)}
+.tone-offline{color:var(--red)}
+/* The app's own update, under the version in About. */
+.app-update{margin-top:16px;padding-top:14px;border-top:1px solid var(--border)}
+.app-update h4{margin:0 0 8px;font-size:13px}
+.app-update-notes{margin:10px 0 0;font-size:12px;color:var(--muted);white-space:pre-line}
+.app-update-notes strong{display:block;color:var(--ink);margin-bottom:2px}
+.app-update-manual{margin:8px 0 0;font-size:12px;color:var(--muted)}
+.notices-title{margin:18px 0 2px;font-size:13px}
+.notices-lead{font-size:12px;margin:0 0 8px}
+.notices{list-style:none;margin:0;padding:0;font-size:12px}
+.notices li{display:grid;grid-template-columns:1fr auto;gap:0 10px;padding:7px 0;border-top:1px solid var(--border)}
+.notices li .muted{grid-column:1/-1;font-size:11px}
+/* Settings › Account: the password change form under its row. */
+.password-form{display:flex;flex-direction:column;gap:10px;margin-top:10px;padding:12px 14px;background:var(--surface);border:1px solid var(--border);border-radius:12px}
+.password-form label{display:flex;flex-direction:column;gap:4px;margin:0;font-weight:400}
+.password-hint{margin:0;font-size:12px}
+.password-problem{margin:0;font-size:13px;color:var(--error-ink)}
+.password-actions{display:flex;justify-content:flex-end;gap:8px}
+.toggle-description.password-done{color:var(--success-ink)}
+.email-address{font-size:13px;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;overflow-wrap:anywhere}

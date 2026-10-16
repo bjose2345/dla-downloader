@@ -1,0 +1,460 @@
+name: Desktop builds and releases
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: desktop-build-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  COREPACK_ENABLE_DOWNLOAD_PROMPT: 0
+  NODE_VERSION: 26.7.0
+  TAURI_CLI_VERSION: 2.11.4
+
+jobs:
+  sidecars:
+    name: Fetch the pinned sidecar
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Download cloudflared at its pinned checksums
+        run: |
+          sh tauri2/scripts/fetch-cloudflared.sh
+          # A tarball keeps the Linux executable bit across the artifact store.
+          tar -C tauri2/src-tauri -cf sidecars.tar binaries
+
+      - name: Share the sidecar with the other jobs
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: desktop-sidecars
+          path: sidecars.tar
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 1
+
+  test:
+    name: Check and test
+    needs: sidecars
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev \
+            libssl-dev libayatana-appindicator3-dev librsvg2-dev pkg-config
+
+      - name: Download the pinned sidecar
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: desktop-sidecars
+
+      - name: Place the sidecar beside the Tauri project
+        run: tar -C tauri2/src-tauri -xf sidecars.tar && rm sidecars.tar
+
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Enable the pinned pnpm version
+        run: corepack enable
+
+      - name: Install frontend dependencies
+        working-directory: tauri2/ui
+        run: pnpm install --frozen-lockfile
+
+      - name: Check and test the interface
+        working-directory: tauri2/ui
+        run: |
+          pnpm typecheck
+          pnpm test
+          python3 ../tools/i18n.py check
+
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: tauri2 -> target
+
+      - name: Check and test the Rust workspace
+        working-directory: tauri2
+        run: |
+          cargo fmt --all --check
+          cargo clippy --workspace --all-targets -- -D warnings
+          cargo test --workspace
+
+  build:
+    name: Build ${{ matrix.name }}
+    needs: [sidecars, test]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Linux x86_64 (AppImage)
+            runner: ubuntu-22.04
+            bundles: appimage
+            artifact-name: dla-downloader-linux-x86_64
+            artifact-paths: tauri2/target/release/bundle/appimage/*.AppImage
+          - name: Windows x86_64 (NSIS)
+            runner: windows-2022
+            bundles: nsis
+            artifact-name: dla-downloader-windows-x86_64
+            artifact-paths: tauri2/target/release/bundle/nsis/*.exe
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev build-essential curl wget file libxdo-dev \
+            libssl-dev libayatana-appindicator3-dev librsvg2-dev pkg-config \
+            libfuse2 xdg-utils
+
+      - name: Download the pinned sidecar
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: desktop-sidecars
+
+      - name: Place the sidecar beside the Tauri project
+        shell: bash
+        run: tar -C tauri2/src-tauri -xf sidecars.tar && rm sidecars.tar
+
+      - name: Write the access token
+        shell: bash
+        env:
+          DLA_DOWNLOADER_ACCESS_TOKEN: ${{ secrets.DLA_DOWNLOADER_ACCESS_TOKEN }}
+        run: |
+          # Repository secret holding the app's Cloudflare Access service token
+          # (state/tunnel/service-token.json). Forks and builds without it still
+          # succeed; the app then cannot reach DLA.
+          if [[ -n "$DLA_DOWNLOADER_ACCESS_TOKEN" ]]; then
+            token_file="$RUNNER_TEMP/service-token.json"
+            printf '%s' "$DLA_DOWNLOADER_ACCESS_TOKEN" > "$token_file"
+            echo "DLA_ACCESS_TOKEN_FILE=$token_file" >> "$GITHUB_ENV"
+            echo "The access token is set for this build."
+          else
+            echo "No DLA_DOWNLOADER_ACCESS_TOKEN secret; this build cannot reach DLA."
+          fi
+
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Enable the pinned pnpm version
+        run: corepack enable
+
+      - name: Install frontend dependencies
+        working-directory: tauri2/ui
+        run: pnpm install --frozen-lockfile
+
+      - name: Cache Rust dependencies and tools
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
+        with:
+          workspaces: tauri2 -> target
+
+      - name: Install the pinned Tauri CLI
+        run: cargo install tauri-cli --version ${{ env.TAURI_CLI_VERSION }} --locked
+
+      - name: Build the installer
+        working-directory: tauri2
+        shell: bash
+        env:
+          # The AppImage tools run without FUSE on the build machine.
+          APPIMAGE_EXTRACT_AND_RUN: 1
+        run: cargo tauri build --ci --bundles ${{ matrix.bundles }}
+
+      - name: Upload the installer
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: ${{ matrix.artifact-name }}
+          path: ${{ matrix.artifact-paths }}
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 14
+
+  release:
+    name: Publish GitHub Release
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+
+    steps:
+      - name: Check out tagged source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Verify the tag matches the application version
+        shell: bash
+        run: |
+          expected_tag="v$(node --print "require('./tauri2/src-tauri/tauri.conf.json').version")"
+          if [[ "$GITHUB_REF_NAME" != "$expected_tag" ]]; then
+            echo "Release tag $GITHUB_REF_NAME does not match tauri.conf.json ($expected_tag)." >&2
+            exit 1
+          fi
+
+      - name: Download the installers
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          pattern: dla-downloader-*
+          path: downloaded-assets
+
+      - name: Prepare release assets and checksums
+        shell: bash
+        run: |
+          mkdir release-assets
+          while IFS= read -r -d '' asset; do
+            name="$(basename "$asset")"
+            release_name="${name// /-}"
+            if [[ -e "release-assets/$release_name" ]]; then
+              echo "Duplicate release asset name: $release_name" >&2
+              exit 1
+            fi
+            cp "$asset" "release-assets/$release_name"
+          done < <(find downloaded-assets -type f -print0)
+
+          if ! compgen -G 'release-assets/*' > /dev/null; then
+            echo "No release assets were downloaded." >&2
+            exit 1
+          fi
+
+          version="${GITHUB_REF_NAME#v}"
+          source_prefix="DLA-Downloader-${version}/"
+          git archive --format=zip --prefix="$source_prefix" \
+            --output="release-assets/DLA-Downloader_${version}_source.zip" "$GITHUB_SHA"
+          git archive --format=tar --prefix="$source_prefix" "$GITHUB_SHA" \
+            | gzip -9 -n > "release-assets/DLA-Downloader_${version}_source.tar.gz"
+
+          cd release-assets
+          sha256sum -- * > SHA256SUMS.txt
+
+      - name: Prepare the public release manifest
+        shell: bash
+        run: |
+          mkdir r2-metadata
+          node .github/scripts/create-release-manifest.mjs \
+            release-assets \
+            r2-metadata/latest.json \
+            "$GITHUB_REF_NAME" \
+            "https://downloads.dlsitearchive.com/downloader" \
+            "$GITHUB_SHA"
+
+      - name: Preserve finalized assets for R2 publication
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: dla-downloader-r2-release
+          path: |
+            release-assets
+            r2-metadata/latest.json
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+
+      - name: Create or update the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          mapfile -d '' assets < <(find release-assets -maxdepth 1 -type f -print0)
+
+          if ! gh release view "$GITHUB_REF_NAME" > /dev/null 2>&1; then
+            release_flags=(
+              --verify-tag
+              --generate-notes
+              --title "DLA Downloader $GITHUB_REF_NAME"
+              --draft
+            )
+            if [[ "$GITHUB_REF_NAME" == *-* ]]; then
+              release_flags+=(--prerelease)
+            fi
+            gh release create "$GITHUB_REF_NAME" "${release_flags[@]}"
+          fi
+
+          for asset in "${assets[@]}"; do
+            uploaded=false
+            for attempt in 1 2 3; do
+              if gh release upload "$GITHUB_REF_NAME" "$asset" --clobber; then
+                uploaded=true
+                break
+              fi
+              echo "Upload attempt $attempt failed for $(basename "$asset")." >&2
+              sleep $((attempt * 5))
+            done
+            if [[ "$uploaded" != true ]]; then
+              echo "Failed to upload $(basename "$asset") after three attempts." >&2
+              exit 1
+            fi
+          done
+
+          if [[ "$(gh release view "$GITHUB_REF_NAME" --json isDraft --jq .isDraft)" == true ]]; then
+            publish_flags=(--draft=false)
+            if [[ "$GITHUB_REF_NAME" == *-* ]]; then
+              publish_flags+=(--prerelease)
+            fi
+            gh release edit "$GITHUB_REF_NAME" "${publish_flags[@]}"
+          fi
+
+  publish-r2:
+    name: Publish current release to R2
+    # Off until the repository variable R2_PUBLISH is "true" and the download
+    # site serves the downloader/ folder.
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && vars.R2_PUBLISH == 'true'
+    needs: release
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    environment: r2-production
+    permissions:
+      contents: read
+    concurrency:
+      group: dla-downloader-r2-production
+      cancel-in-progress: false
+
+    steps:
+      - name: Download finalized release assets
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: dla-downloader-r2-release
+          path: r2-publication
+
+      - name: Install the pinned AWS CLI
+        shell: bash
+        run: |
+          python3 -m pip install --disable-pip-version-check --no-input --user awscli==1.46.0
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Upload, verify, and promote the current release
+        shell: bash
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_RELEASES_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_RELEASES_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          AWS_EC2_METADATA_DISABLED: true
+          AWS_MAX_ATTEMPTS: 5
+          AWS_RETRY_MODE: standard
+          R2_ENDPOINT: ${{ secrets.R2_RELEASES_ENDPOINT }}
+          R2_BUCKET: dla-launcher
+          # This app's folder in the shared releases bucket.
+          R2_PREFIX: downloader
+        run: |
+          : "${AWS_ACCESS_KEY_ID:?Missing R2_RELEASES_ACCESS_KEY_ID}"
+          : "${AWS_SECRET_ACCESS_KEY:?Missing R2_RELEASES_SECRET_ACCESS_KEY}"
+          : "${R2_ENDPOINT:?Missing R2_RELEASES_ENDPOINT}"
+          R2_ENDPOINT="${R2_ENDPOINT%/}"
+
+          current_tag="$GITHUB_REF_NAME"
+          if [[ ! "$current_tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Unsafe release tag: $current_tag" >&2
+            exit 1
+          fi
+
+          assets_dir="r2-publication/release-assets"
+          manifest="r2-publication/r2-metadata/latest.json"
+          manifest_tag="$(node --print "JSON.parse(require('fs').readFileSync(process.argv[1], 'utf8')).tag" "$manifest")"
+          if [[ "$manifest_tag" != "$current_tag" ]]; then
+            echo "Manifest tag $manifest_tag does not match $current_tag." >&2
+            exit 1
+          fi
+
+          mkdir r2-verification
+          previous_tag=""
+          if aws s3 cp "s3://$R2_BUCKET/$R2_PREFIX/latest.json" r2-verification/previous-latest.json \
+            --endpoint-url "$R2_ENDPOINT" --only-show-errors; then
+            # The single-quoted program is JavaScript, so shell expansion is intentionally disabled.
+            # shellcheck disable=SC2016
+            previous_tag="$(node -e '
+              const fs = require("fs");
+              const tag = JSON.parse(fs.readFileSync(process.argv[1], "utf8")).tag;
+              if (!/^v\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(tag)) {
+                throw new Error(`Unsafe previous release tag: ${tag}`);
+              }
+              process.stdout.write(tag);
+            ' r2-verification/previous-latest.json)"
+          fi
+
+          content_type() {
+            case "$1" in
+              *.tar.gz) echo "application/gzip" ;;
+              *.zip) echo "application/zip" ;;
+              *.exe) echo "application/vnd.microsoft.portable-executable" ;;
+              *.AppImage) echo "application/vnd.appimage" ;;
+              *.txt) echo "text/plain; charset=utf-8" ;;
+              *) echo "application/octet-stream" ;;
+            esac
+          }
+
+          while IFS= read -r -d '' asset; do
+            name="$(basename "$asset")"
+            key="$R2_PREFIX/releases/$current_tag/$name"
+            aws s3 cp "$asset" "s3://$R2_BUCKET/$key" \
+              --endpoint-url "$R2_ENDPOINT" --only-show-errors \
+              --cache-control "public, max-age=31536000, immutable" \
+              --content-type "$(content_type "$name")" \
+              --content-disposition "attachment; filename=\"$name\""
+          done < <(find "$assets_dir" -maxdepth 1 -type f -print0 | sort -z)
+
+          while IFS= read -r -d '' asset; do
+            name="$(basename "$asset")"
+            key="$R2_PREFIX/releases/$current_tag/$name"
+            expected_size="$(stat --format='%s' "$asset")"
+            remote_size="$(aws s3api head-object --bucket "$R2_BUCKET" --key "$key" \
+              --endpoint-url "$R2_ENDPOINT" --query ContentLength --output text)"
+            if [[ "$remote_size" != "$expected_size" ]]; then
+              echo "R2 size mismatch for $name: expected $expected_size, received $remote_size." >&2
+              exit 1
+            fi
+            aws s3 cp "s3://$R2_BUCKET/$key" "r2-verification/$name" \
+              --endpoint-url "$R2_ENDPOINT" --only-show-errors
+            expected_sha="$(sha256sum "$asset" | cut -d ' ' -f 1)"
+            actual_sha="$(sha256sum "r2-verification/$name" | cut -d ' ' -f 1)"
+            if [[ "$actual_sha" != "$expected_sha" ]]; then
+              echo "R2 checksum mismatch for $name." >&2
+              exit 1
+            fi
+          done < <(find "$assets_dir" -maxdepth 1 -type f -print0 | sort -z)
+
+          aws s3 cp "$manifest" "s3://$R2_BUCKET/$R2_PREFIX/latest.json" \
+            --endpoint-url "$R2_ENDPOINT" --only-show-errors \
+            --cache-control "no-store" --content-type "application/json; charset=utf-8"
+          aws s3 cp "s3://$R2_BUCKET/$R2_PREFIX/latest.json" r2-verification/published-latest.json \
+            --endpoint-url "$R2_ENDPOINT" --only-show-errors
+          cmp --silent "$manifest" r2-verification/published-latest.json
+
+          if [[ -n "$previous_tag" && "$previous_tag" != "$current_tag" ]]; then
+            aws s3 rm "s3://$R2_BUCKET/$R2_PREFIX/releases/$previous_tag/" \
+              --recursive --endpoint-url "$R2_ENDPOINT" --only-show-errors
+          fi

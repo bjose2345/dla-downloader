@@ -1,0 +1,24 @@
+[package]
+name = "dla-app-update"
+description = "Finds, downloads and verifies new versions of DLA Downloader in the releases folder"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[dependencies]
+base64.workspace = true
+dla-library.workspace = true
+dla-remote.workspace = true
+hex.workspace = true
+minisign-verify.workspace = true
+semver.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+zeroize.workspace = true

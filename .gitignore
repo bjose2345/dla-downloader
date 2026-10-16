@@ -1,0 +1,18 @@
+.env
+.idea/
+.vscode/
+node_modules/
+target/
+dist/
+.pnpm-store/
+__pycache__/
+*.log
+.DS_Store
+Thumbs.db
+
+# The access token and any signing key stay local (see docs/BUILDING.md).
+/state/
+# The bundled cloudflared binaries; fetch them with tauri2/scripts/fetch-cloudflared.sh.
+tauri2/src-tauri/binaries/
+tauri2/src-tauri/gen/
+tauri2/.windows-tools/

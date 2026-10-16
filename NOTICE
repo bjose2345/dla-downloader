@@ -1,0 +1,14 @@
+DLA Downloader
+Copyright (C) 2026 DLA Project contributors
+
+This distribution is licensed under the GNU Affero General Public License,
+version 3 only. See LICENSE for the complete terms.
+
+DLsite is a trademark of its respective owner. DLA Downloader and DLA Project
+are independent community projects and are not affiliated with or endorsed by
+DLsite or EISYS.
+
+The installers bundle cloudflared (Apache-2.0, Cloudflare, Inc.). Other
+third-party dependencies remain under their respective licenses; their names
+and exact versions are recorded in tauri2/ui/pnpm-lock.yaml and
+tauri2/Cargo.lock.

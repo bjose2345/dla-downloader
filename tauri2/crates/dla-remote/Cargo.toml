@@ -1,0 +1,20 @@
+[package]
+name = "dla-remote"
+description = "The HTTPS client for DLA's read-only download service"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+authors.workspace = true
+publish.workspace = true
+
+[dependencies]
+base64.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+ureq.workspace = true
+url.workspace = true
+zeroize.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
