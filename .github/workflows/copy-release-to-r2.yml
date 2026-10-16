@@ -53,13 +53,15 @@ jobs:
           (cd release-assets && sha256sum --check --strict SHA256SUMS.txt)
 
           commit="$(gh api "repos/$GH_REPO/commits/$TAG" --jq .sha)"
+          published_at="$(gh release view "$TAG" --json publishedAt --jq .publishedAt)"
           mkdir r2-metadata
           node .github/scripts/create-release-manifest.mjs \
             release-assets \
             r2-metadata/latest.json \
             "$TAG" \
             "https://downloads.dlsitearchive.com/downloader" \
-            "$commit"
+            "$commit" \
+            "$published_at"
 
       - name: Install the pinned AWS CLI
         shell: bash
