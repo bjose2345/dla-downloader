@@ -1,44 +1,44 @@
 # DLA Downloader
 
-DLA Downloader is an open-source desktop app for Linux and Windows that lets DLA
-Elite subscribers browse, search and download the DLA archive with their own
-account, instead of through the web client. It is built with Tauri 2, Rust,
-React and TypeScript.
+DLA Downloader is a desktop app for DLA Elite patrons. Sign in with your DLA
+account, choose a folder, and download works from the archive straight to your
+computer, without going through the website.
 
-This repository holds the complete source of the app as it is released, so
-anyone can read what it does and build it themselves.
+It runs on Windows and Linux.
 
-> DLA Downloader is pre-release software.
+**Download it here:** https://dlsitearchive.com/en-US/releases/downloader
 
-## What it does
+> DLA Downloader is still in early testing, so you may run into rough edges.
+> If something doesn't work, let us know.
 
-- Signs in with the subscriber's own DLA account. The password stays in memory
-  and is never written to disk.
-- Lists the archive by month and searches the whole catalog by work code,
-  title or circle, from a local copy of the archive's published manifests.
-- Downloads one file at a time in resumable ranges, then checks every file
-  against the archive's SHA-256 before giving it its final name.
-- Skips files already in the chosen folder when their size and SHA-256 match,
-  so downloading a whole month again fetches only what is new.
-- Changes the account's password and email address, and recovers a forgotten
-  password by email.
-- Updates itself: a new version is downloaded in the background, checked
-  against its SHA-256 and the release signature, and installed when the user
-  restarts.
+## What you can do with it
 
-The app writes only to its own data folder and the download folders the user
-chooses. It runs no local web server and keeps no credentials.
+- Browse the archive month by month, or search it by work code, title or
+  circle.
+- Download works to any folder you choose.
+- Pause downloads and continue later. If your connection drops, a download
+  picks up where it stopped.
+- Download a month again and get only what's new: files you already have are
+  recognized and skipped.
+- Every file is checked after it downloads, so you know it arrived complete.
+- Change your password or email, or reset a forgotten password, right from the
+  app.
+- The app keeps itself up to date.
 
-## Updates and their signature
+## Your account and your files
 
-Releases are built by this repository's GitHub workflow. Copies update from
-DLA's releases folder, and an update is installed only when its signature
-matches the public key in [`tauri2/certs/update-key.pub`](tauri2/certs/update-key.pub).
-The private half of that key never leaves the maintainer's machine.
+You sign in with the same account you use on the site, and your password is
+never saved on your computer. The app only writes to its own settings folder
+and the download folders you pick.
 
-## Build from source
+## Open source
 
-See [Building](docs/BUILDING.md).
+All of the app's code is in this repository, so anyone can read what it does.
+Every release is built by GitHub from this code, and the download page lists a
+checksum for each file, so you can confirm that what you downloaded is exactly
+what was built here.
+
+Want to build it yourself? See [Building](docs/BUILDING.md).
 
 ## License
 
