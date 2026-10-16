@@ -1,45 +1,67 @@
 # DLA Downloader
 
-DLA Downloader is a desktop app for DLA Elite patrons. Sign in with your DLA
-account, choose a folder, and download works from the archive straight to your
-computer, without going through the website.
+DLA Downloader is a desktop app for DLA Elite patrons that makes downloading from the archive easier.
 
-It runs on Windows and Linux.
+Sign in with your DLA account, choose a folder, and download the original archive files directly to your computer without using the FTP web page.
 
-**Download it here:** https://dlsitearchive.com/en-US/releases/downloader
+Available for **Windows** and **Linux**.
 
-> DLA Downloader is still in early testing, so you may run into rough edges.
-> If something doesn't work, let us know.
+> DLA Downloader is still in early testing, so you may run into a few rough edges. If something doesn't work or you have a suggestion, let us know.
 
-## What you can do with it
+## What can it do?
 
-- Browse the archive month by month, or search it by work code, title or
-  circle.
-- Download works to any folder you choose.
-- Pause downloads and continue later. If your connection drops, a download
-  picks up where it stopped.
-- Download a month again and get only what's new: files you already have are
-  recognized and skipped.
-- Every file is checked after it downloads, so you know it arrived complete.
-- Change your password or email, or reset a forgotten password, right from the
-  app.
-- The app keeps itself up to date.
+- Browse the archive month by month.
+- Search by work code, title, or circle.
+- Download files to any folder you choose.
+- Pause downloads and continue them later.
+- Resume interrupted downloads without starting again.
+- Check files you already have and skip matching ones automatically.
+- Verify every downloaded file against its checksum.
+- Change your email or password, or reset a forgotten password, from the app.
+- Check for and install app updates.
 
-## Your account and your files
+## Downloads and existing files
 
-You sign in with the same account you use on the site, and your password is
-never saved on your computer. The app only writes to its own settings folder
-and the download folders you pick.
+Choose a folder and start downloading.
+
+If your connection drops or you pause a download, you can continue from where it stopped.
+
+If you already have some files in the selected folder, DLA Downloader checks them first. Files that already match the archive are skipped, so you only download what you're missing.
+
+Every completed download is also verified to make sure the file arrived correctly.
+
+## Original archive files
+
+DLA Downloader keeps the original archive files as they are stored on our servers.
+
+It does not extract or install them automatically, so it's useful if you prefer to keep and organize the original files yourself.
+
+## Your account and files
+
+Sign in with the same DLA account you use on the site.
+
+Your password is **never stored on your computer**.
+
+The app only writes to its own settings folder and to the download folders you choose.
 
 ## Open source
 
-All of the app's code is in this repository, so anyone can read what it does.
-Every release is built by GitHub from this code, and the download page lists a
-checksum for each file, so you can confirm that what you downloaded is exactly
-what was built here.
+DLA Downloader is open source under the **AGPL-3.0-only** license.
 
-Want to build it yourself? See [Building](docs/BUILDING.md).
+All source code is available in this repository, and releases are built from this code using GitHub Actions.
+
+Each release also includes SHA-256 checksums so you can verify the downloaded installers yourself.
+
+If you want to build the app locally, see [Building](docs/BUILDING.md).
+
+## Need help?
+
+If something doesn't work, you find a bug, or you have an idea for the app, feel free to let us know.
+
+You can open a ticket from **Profile → Tickets** on the DLA website.
 
 ## License
 
-AGPL-3.0-only. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
+Licensed under **AGPL-3.0-only**.
+
+See [LICENSE](LICENSE) and [NOTICE](NOTICE).
