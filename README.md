@@ -29,21 +29,6 @@ anyone can read what it does and build it themselves.
 The app writes only to its own data folder and the download folders the user
 chooses. It runs no local web server and keeps no credentials.
 
-## How it reaches DLA
-
-The app talks to one service: DLA's read-only download service. It connects
-through a bundled [`cloudflared`](https://github.com/cloudflare/cloudflared)
-over a Cloudflare Access route, and trusts only DLA's own certificate authority
-([`tauri2/certs/upload-ca.crt`](tauri2/certs/upload-ca.crt)) for the
-connection behind it. Every request carries the subscriber's own credentials;
-the server decides what the account may read and how much of its allowance a
-download uses.
-
-The route's service token is embedded at build time and is not in this
-repository. It only keeps unsolicited traffic off the route: access to the
-archive is decided by the subscriber's account. A build without it works but
-cannot reach DLA.
-
 ## Updates and their signature
 
 Releases are built by this repository's GitHub workflow. Copies update from
