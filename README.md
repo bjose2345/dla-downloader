@@ -20,6 +20,29 @@ Available for **Windows** and **Linux**.
 - Change your email or password, or reset a forgotten password, from the app.
 - Check for and install app updates.
 
+## Screenshots
+
+Browse the archive by month and download what you need:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/library-dark.png">
+  <img src="docs/screenshots/library-light.png" alt="The archive library in DLA Downloader, showing one month of files" width="800">
+</picture>
+
+Sign in with your DLA account:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/sign-in-dark.png">
+  <img src="docs/screenshots/sign-in-light.png" alt="The DLA Downloader sign-in screen" width="800">
+</picture>
+
+Choose the language, the look and your download folder in Settings:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/settings-dark.png">
+  <img src="docs/screenshots/settings-light.png" alt="The Settings panel in DLA Downloader" width="800">
+</picture>
+
 ## Downloads and existing files
 
 Choose a folder and start downloading.
