@@ -828,7 +828,7 @@ dependencies = [
 
 [[package]]
 name = "dla-app-update"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "base64 0.22.1",
  "dla-library",
@@ -846,7 +846,7 @@ dependencies = [
 
 [[package]]
 name = "dla-connector"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "dla-app-update",
  "dla-library",
@@ -861,7 +861,7 @@ dependencies = [
 
 [[package]]
 name = "dla-downloader"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "dla-app-update",
  "dla-connector",
@@ -883,7 +883,7 @@ dependencies = [
 
 [[package]]
 name = "dla-library"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "dla-remote",
  "hex",
@@ -897,7 +897,7 @@ dependencies = [
 
 [[package]]
 name = "dla-remote"
-version = "0.1.0-alpha.1"
+version = "0.1.0-alpha.2"
 dependencies = [
  "base64 0.22.1",
  "serde",
