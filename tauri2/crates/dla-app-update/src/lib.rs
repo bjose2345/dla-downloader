@@ -16,6 +16,8 @@ use std::{
     io::{self, Read},
     path::{Path, PathBuf},
     process::Command,
+    thread,
+    time::Duration,
 };
 
 use base64::{Engine, engine::general_purpose::STANDARD};
@@ -36,6 +38,19 @@ pub const RELEASES: &str = "/releases/dla-downloader";
 /// Written last when a release is published, so it never names a missing file.
 pub const MANIFEST: &str = "/releases/dla-downloader/latest.json";
 const MANIFEST_LIMIT: u64 = 256 << 10;
+
+/// How long a check keeps asking while the service is busy or out of reach
+/// for a moment, about a minute in all. The download service serves one file
+/// per account at a time, and right after sign-in the catalog refresh is
+/// fetching month manifests, a full one for up to about half a minute.
+pub const CHECK_RETRY_DELAYS: [Duration; 6] = [
+    Duration::from_secs(1),
+    Duration::from_secs(2),
+    Duration::from_secs(4),
+    Duration::from_secs(8),
+    Duration::from_secs(15),
+    Duration::from_secs(30),
+];
 const MAX_INSTALLER: u64 = 2 << 30;
 const MAX_NOTES: usize = 4000;
 const READ: usize = 1 << 20;
@@ -119,9 +134,30 @@ pub enum UpdateError {
 }
 
 /// Reads `latest.json` from the releases folder and compares it with
-/// `current`, this app's version.
+/// `current`, this app's version, asking again while the service is busy
+/// (see [`CHECK_RETRY_DELAYS`]). Blocks while it waits.
 pub fn check(archive: &dyn Archive, current: &str, target: &str) -> Result<Check, UpdateError> {
-    match archive.fetch(MANIFEST, MANIFEST_LIMIT, None) {
+    check_with_retries(archive, current, target, &CHECK_RETRY_DELAYS)
+}
+
+/// [`check`], waiting `delays` between attempts that failed for a moment.
+pub fn check_with_retries(
+    archive: &dyn Archive,
+    current: &str,
+    target: &str,
+    delays: &[Duration],
+) -> Result<Check, UpdateError> {
+    let mut waits = delays.iter();
+    let fetched = loop {
+        match archive.fetch(MANIFEST, MANIFEST_LIMIT, None) {
+            Err(error) if error.is_transient() => match waits.next() {
+                Some(delay) => thread::sleep(*delay),
+                None => break Err(error),
+            },
+            fetched => break fetched,
+        }
+    };
+    match fetched {
         Ok(Fetched::Content { data, .. }) => evaluate(&data, current, target),
         Ok(Fetched::NotModified) => Err(invalid("an answer to a question not asked")),
         // The folder and the file are only there once something is published.

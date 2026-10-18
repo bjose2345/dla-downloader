@@ -10,12 +10,13 @@ use std::{
         Mutex,
         atomic::{AtomicUsize, Ordering},
     },
+    time::Duration,
 };
 
 use common::*;
 use dla_app_update::{
-    Check, MANIFEST, RELEASES, Release, UpdateError, check, download, evaluate, installer_command,
-    is_newer, is_verified, verify_signature,
+    Check, MANIFEST, RELEASES, Release, UpdateError, check, check_with_retries, download, evaluate,
+    installer_command, is_newer, is_verified, verify_signature,
 };
 use dla_library::{Archive, DownloadActivity, DownloadError, DownloadOptions, DownloadSink};
 use dla_remote::{Fetched, RangeChunk, RemoteEntry};
@@ -26,6 +27,10 @@ use dla_remote::{PauseSignal, RemoteError, RemoteErrorKind};
 struct Releases {
     files: Mutex<BTreeMap<String, Vec<u8>>>,
     ranges: AtomicUsize,
+    fetches: AtomicUsize,
+    /// Answer this many of the next fetches as the download service does
+    /// while the account is fetching another file.
+    busy: AtomicUsize,
 }
 
 impl Releases {
@@ -63,6 +68,19 @@ impl Archive for Releases {
     }
 
     fn fetch(&self, path: &str, limit: u64, _: Option<&str>) -> Result<Fetched, RemoteError> {
+        self.fetches.fetch_add(1, Ordering::SeqCst);
+        if self
+            .busy
+            .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |left| {
+                left.checked_sub(1)
+            })
+            .is_ok()
+        {
+            return Err(RemoteError::new(
+                RemoteErrorKind::Status(429),
+                "This account is already downloading a file.",
+            ));
+        }
         let data = self
             .files
             .lock()
@@ -416,4 +434,32 @@ fn an_app_image_is_replaced_in_one_step() {
         0o755
     );
     assert_eq!(fs::read_dir(folder.path()).unwrap().count(), 2);
+}
+
+#[test]
+fn a_busy_service_is_asked_again_before_the_check_gives_up() {
+    let releases = Releases::installer(PAYLOAD, SIGNATURE);
+    // Busy twice, as while the catalog refresh fetches manifests: the third
+    // attempt finds the release.
+    releases.busy.store(2, Ordering::SeqCst);
+    let found = check_with_retries(&releases, "0.3.0", TARGET, &[Duration::ZERO; 3]).unwrap();
+    assert!(matches!(found, Check::Available { .. }));
+    assert_eq!(releases.fetches.load(Ordering::SeqCst), 3);
+
+    // Busy for longer than the waits allow: the service's answer comes back.
+    releases.fetches.store(0, Ordering::SeqCst);
+    releases.busy.store(5, Ordering::SeqCst);
+    let error = check_with_retries(&releases, "0.3.0", TARGET, &[Duration::ZERO; 2]).unwrap_err();
+    assert!(
+        matches!(&error, UpdateError::Remote(remote) if remote.kind == RemoteErrorKind::Status(429))
+    );
+    assert_eq!(releases.fetches.load(Ordering::SeqCst), 3);
+
+    // Nothing published is an answer, not a reason to ask again.
+    let empty = Releases::default();
+    assert!(matches!(
+        check_with_retries(&empty, "0.3.0", TARGET, &[Duration::ZERO; 3]).unwrap(),
+        Check::NoReleases
+    ));
+    assert_eq!(empty.fetches.load(Ordering::SeqCst), 1);
 }
