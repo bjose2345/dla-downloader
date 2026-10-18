@@ -9,7 +9,7 @@ use tauri_plugin_opener::OpenerExt;
 use super::{blocking, pick_folder};
 use crate::{
     app_update::{AppUpdater, UPDATE_REQUIRED},
-    library::{FolderFile, Library, LibraryNotice, LibraryView, RequestedFile},
+    library::{FolderFile, Library, LibraryNotice, LibraryView, RecentFile, RequestedFile},
 };
 
 type SharedLibrary<'a> = State<'a, Arc<Library>>;
@@ -27,6 +27,21 @@ pub fn library_folders(library: SharedLibrary<'_>) -> Vec<FolderSummary> {
 #[tauri::command]
 pub fn library_search(library: SharedLibrary<'_>, query: String) -> Vec<CatalogEntry> {
     library.search(&query)
+}
+
+#[tauri::command]
+pub fn library_recent(library: SharedLibrary<'_>, days: u32) -> Vec<RecentFile> {
+    library.recent(days)
+}
+
+#[tauri::command]
+pub fn library_added_months(library: SharedLibrary<'_>, offset: i32) -> Vec<FolderSummary> {
+    library.added_months(offset)
+}
+
+#[tauri::command]
+pub fn library_added(library: SharedLibrary<'_>, month: String, offset: i32) -> Vec<RecentFile> {
+    library.added(&month, offset)
 }
 
 #[tauri::command]

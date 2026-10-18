@@ -336,6 +336,46 @@ fn refresh_retries_dropped_connections_and_marks_unreadable_manifests() {
 }
 
 #[test]
+fn refresh_reads_dates_added_and_rereads_caches_from_before_them() {
+    let directory = tempfile::tempdir().unwrap();
+    let cache = directory.path().join("index.json");
+    let archive = FakeArchive::default();
+    archive.put(
+        "2026-10",
+        "t1",
+        "_manifest.json",
+        br#"{"files": {"RJ1__a.zip": {"work_id": "RJ1", "size": 1, "added_date": "2026-10-18T06:25:16Z"}}}"#,
+    );
+    let added = |store: &IndexStore| -> Vec<(String, String)> {
+        store
+            .catalog()
+            .arrived_since(0)
+            .into_iter()
+            .map(|recent| (recent.entry.file_name.clone(), recent.entry.added.clone()))
+            .collect()
+    };
+
+    let mut store = IndexStore::open(Some(cache.clone()));
+    refresh(&mut store, &archive, &quick());
+    assert_eq!(archive.fetches.load(Ordering::SeqCst), 1);
+    assert_eq!(
+        added(&store),
+        [("RJ1__a.zip".to_owned(), "2026-10-18T06:25:16Z".to_owned())]
+    );
+
+    // A cache an older version wrote has entries without dates: it is not
+    // trusted, so the unchanged manifest is read again.
+    let mut saved: serde_json::Value = serde_json::from_slice(&fs::read(&cache).unwrap()).unwrap();
+    saved["version"] = 2.into();
+    fs::write(&cache, serde_json::to_vec(&saved).unwrap()).unwrap();
+    let mut store = IndexStore::open(Some(cache));
+    assert!(store.is_empty());
+    refresh(&mut store, &archive, &quick());
+    assert_eq!(archive.fetches.load(Ordering::SeqCst), 2);
+    assert_eq!(added(&store).len(), 1);
+}
+
+#[test]
 fn a_failed_or_stopped_refresh_keeps_what_it_had_and_rechecks_later() {
     let directory = tempfile::tempdir().unwrap();
     let cache = directory.path().join("index.json");

@@ -179,6 +179,26 @@ export interface CatalogEntry {
   sha256: string | null;
 }
 
+/** A file with when it reached the archive ("Date added" and "Latest added"). */
+export interface RecentFile {
+  /** The month folder, which follows the work's release date. */
+  folder: string;
+  name: string;
+  path: string;
+  size: number;
+  /** When dlminer added the file to the archive (RFC 3339). */
+  arrived: string;
+  workId: string | null;
+  title: string | null;
+  circle: string | null;
+  version: string | null;
+  updated: string | null;
+  released: string | null;
+  checked: boolean;
+  /** A newer copy of a work the archive already had. */
+  update: boolean;
+}
+
 export interface RequestedFile {
   path: string;
   size: number;

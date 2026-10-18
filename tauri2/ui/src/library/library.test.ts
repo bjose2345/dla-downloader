@@ -2,8 +2,28 @@ import { describe, expect, it } from "vitest";
 
 import { remainingLabel, dateLabel } from "../shared/format";
 import { plural, translate, type Translate } from "../i18n/catalogs";
-import { copyLabel, entryCopy, fileCopy, groupFolders, isWorkCode, monthLabel, narrowResults, sortFiles, summarizeCopies, summaryText, yearKey } from "./library";
-import type { CatalogEntry, DownloadView, FolderFile } from "../backend/types";
+import {
+  addedMonthLabel,
+  arrivalDayLabel,
+  arrivalDays,
+  arrivedAt,
+  copyLabel,
+  entryCopy,
+  fileCopy,
+  fileFolder,
+  groupFolders,
+  isWorkCode,
+  monthLabel,
+  narrowResults,
+  newSinceOpened,
+  recentCopies,
+  recentFolderFile,
+  sortFiles,
+  summarizeCopies,
+  summaryText,
+  yearKey,
+} from "./library";
+import type { CatalogEntry, DownloadView, FolderFile, RecentFile } from "../backend/types";
 
 const t: Translate = (key, values) => translate("en-US", key, values);
 const count = (base: string, value: number) => plural("en-US", base, value);
@@ -133,5 +153,101 @@ describe("download formatting", () => {
     expect(remainingLabel(t, 7200, 1)).toBe("2 h 0 min left");
     expect(dateLabel("not a date")).toBe("not a date");
     expect(dateLabel(null)).toBe("");
+  });
+});
+
+describe("Latest added", () => {
+  // Server times are HTTP dates; built from local times so the days match in any time zone.
+  const at = (day: number, hour: number, minute = 0) => new Date(2026, 9, day, hour, minute).toUTCString();
+  const recent = (name: string, arrived: string, folder = "2026-10"): RecentFile => ({
+    folder,
+    name,
+    path: `/dlsite/2026-10/${name}`,
+    size: 1,
+    arrived,
+    workId: null,
+    title: null,
+    circle: null,
+    version: null,
+    updated: null,
+    released: null,
+    checked: false,
+    update: false,
+  });
+  const files = [recent("a", at(18, 9, 14)), recent("b", at(18, 0, 5)), recent("c", at(17, 23, 59)), recent("d", at(15, 12))];
+  const copies = recentCopies(files);
+  const now = new Date(2026, 9, 18, 20, 0);
+
+  it("joins the parts of a split set into one row, in part order", () => {
+    const split = recentCopies([
+      recent("RJ1__x.part10.rar", at(17, 8, 3)),
+      recent("RJ1__x.part2.rar", at(17, 8, 1)),
+      recent("RJ1__x.part1.exe", at(17, 8, 9)),
+      recent("RJ1__y.zip", at(17, 9)),
+      recent("RJ1__x.part1.exe", at(16, 8), "2026-09"),
+      recent("RJ2__x.zip", at(16, 7)),
+    ]);
+    expect(split.map((copy) => [copy.key, copy.lead.name, copy.files.length, copy.size])).toEqual([
+      ["2026-10/RJ1/y", "RJ1__y.zip", 1, 1],
+      ["2026-10/RJ1/x", "RJ1__x.part1.exe", 3, 3],
+      ["2026-09/RJ1/x", "RJ1__x.part1.exe", 1, 1],
+      ["2026-10/RJ2/x", "RJ2__x.zip", 1, 1],
+    ]);
+    expect(split[1]?.files.map((file) => file.name)).toEqual(["RJ1__x.part1.exe", "RJ1__x.part2.rar", "RJ1__x.part10.rar"]);
+    // The set counts as arriving with its newest part.
+    expect(split[1]?.arrived).toBe(Date.parse(at(17, 8, 9)));
+  });
+
+  it("groups copies by the local day they arrived", () => {
+    const days = arrivalDays(copies, now);
+    expect(days.map((day) => [day.key, day.daysAgo, day.copies.map((copy) => copy.lead.name)])).toEqual([
+      ["2026-10-18", 0, ["a", "b"]],
+      ["2026-10-17", 1, ["c"]],
+      ["2026-10-15", 3, ["d"]],
+    ]);
+    expect(days.map((day) => arrivalDayLabel(t, day, "en-US"))).toEqual(["Today · Sun, Oct 18", "Yesterday · Sat, Oct 17", "Thu, Oct 15"]);
+  });
+
+  it("counts unseen copies that arrived since Latest added was last open", () => {
+    expect(newSinceOpened(copies, { openedAt: null, seen: [] })).toBe(4);
+    const opened = Date.parse(at(18, 0, 0));
+    expect(newSinceOpened(copies, { openedAt: opened, seen: [] })).toBe(2);
+    expect(newSinceOpened(copies, { openedAt: opened, seen: ["/dlsite/2026-10/a"] })).toBe(1);
+  });
+
+  it("treats an unreadable server time as long ago", () => {
+    expect(arrivedAt(recent("x", "yesterday"))).toBe(0);
+  });
+});
+
+describe("Date added months", () => {
+  it("names a month with its year in the chosen language", () => {
+    expect(addedMonthLabel("2026-10")).toBe("October 2026");
+    expect(addedMonthLabel("2026-10", "ja-JP")).toBe("2026年10月");
+    expect(addedMonthLabel("other")).toBe("other");
+  });
+
+  it("lists an arrival like a month's file, dated by when it arrived", () => {
+    const file = recentFolderFile({
+      folder: "2019-04",
+      name: "RJ1__a.zip",
+      path: "/dlsite/2019-04/RJ1__a.zip",
+      size: 5,
+      arrived: "2026-10-18T06:25:16Z",
+      workId: "RJ1",
+      title: "Title",
+      circle: "Circle",
+      version: null,
+      updated: null,
+      released: "2019-04-02",
+      checked: true,
+      update: false,
+    });
+    expect(file.modified).toBe("2026-10-18T06:25:16Z");
+    expect(fileFolder(file.path)).toBe("2019-04");
+    expect(sortFiles([file, { ...file, name: "RJ2__b.zip", modified: "Sun, 18 Oct 2026 07:00:00 GMT" }], "modified", false).map((entry) => entry.name)).toEqual([
+      "RJ2__b.zip",
+      "RJ1__a.zip",
+    ]);
   });
 });

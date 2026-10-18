@@ -52,6 +52,9 @@
 .downloads-bar>svg{color:var(--blue);flex-shrink:0}
 .downloads-bar>span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tree-pill{position:absolute;inset:0;border-radius:7px;background:var(--accent-soft);z-index:-1}
+/* The undated folder: one line at the year level, its text where the years' text starts. */
+.tree-single{position:relative;z-index:0;padding-left:33px}
+.tree-single.current{color:var(--blue)}
 
 @media(max-width:900px){
   .library-body{grid-template-columns:190px minmax(0,1fr)}
@@ -67,3 +70,61 @@
 /* A copy's version and date; the newest copy of a work is marked Latest. */
 .file-table .copy-line{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:3px;font-size:12px;color:var(--muted)}
 .latest-badge{padding:1px 7px;border-radius:999px;font-size:11px;font-weight:600;background:var(--success-bg);color:var(--success-ink)}
+
+/* Release date / Date added / Latest added, centred, the catalog status under it. */
+.view-row{display:flex;flex-direction:column;align-items:center;gap:6px}
+.view-row .catalog-status{margin:0;text-align:center}
+/* The switch keeps its words at every width; it has the room. */
+.view-switch .tab-label{display:inline}
+.view-switch .tab-badge{width:auto;min-width:18px;padding:0 5px;border-radius:9px;font-weight:700;font-variant-numeric:tabular-nums}
+:root[data-theme=dark] .view-switch .tab-badge{background:#2865cc}
+
+/* Date added: the latest arrivals across every month, the whole width. */
+.recent-pane{min-height:420px}
+.recent-controls{margin-left:auto;align-self:center;display:flex;align-items:center;gap:10px}
+.recent-days{display:flex;align-items:center;gap:8px;margin:0;font-size:13px;font-weight:450;color:var(--muted)}
+.recent-table .day-row td{background:var(--surface-soft);padding:7px 10px;font-size:12px;font-weight:700;letter-spacing:.02em}
+.recent-table .day-row .muted{font-weight:500;margin-left:8px}
+.file-table.recent-table tr.day-row:hover td{background:var(--surface-soft)}
+.recent-table tr.unseen td:first-child{box-shadow:inset 3px 0 0 var(--blue)}
+.recent-table .work{min-width:220px}
+.recent-table .work-title{display:flex;align-items:center;flex-wrap:wrap;gap:4px 8px;font-size:13.5px;font-weight:600}
+.recent-table .work-title>span:first-child{overflow-wrap:anywhere}
+.recent-table .work-sub{display:flex;flex-wrap:wrap;gap:2px 10px;margin-top:2px;font-size:12px;color:var(--muted)}
+.recent-table .work-sub .work-code{margin-right:0}
+.recent-table .type{white-space:nowrap}
+.recent-table .type .copy-line{display:block;margin-top:3px;font-size:12px;color:var(--muted)}
+.recent-table .month,.recent-table .modified{white-space:nowrap}
+.new-mark{display:inline-flex;align-items:center;gap:5px;padding:0 8px 0 6px;border-radius:999px;font-size:11px;font-weight:700;line-height:18px;background:var(--blue);color:#fff}
+.new-mark::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+:root[data-theme=dark] .new-mark{background:#2865cc}
+.type-badge{display:inline-block;padding:1px 8px;border-radius:999px;font-size:11px;font-weight:600}
+.type-badge.added{background:var(--success-bg);color:var(--success-ink)}
+.type-badge.updated{background:var(--accent-soft);color:var(--blue)}
+/* The two buttons stay side by side; the hint wraps, or they move below it. */
+.recent-pane .pane-actions{flex-wrap:wrap}
+.recent-pane .pane-actions>.muted{flex:1 1 240px}
+.pane-buttons{display:flex;gap:8px;margin-left:auto}
+
+/* Loading: a turning circle in the heading, rows shaped like the table. */
+.loading-label{display:inline-flex;align-items:center;gap:6px}
+.table-skeleton{border:1px solid var(--border);border-radius:9px;overflow:hidden}
+.skeleton-head{height:35px;background:var(--surface-muted)}
+.skeleton-row{display:grid;grid-template-columns:16px minmax(0,1.2fr) minmax(0,1.5fr) 72px 110px 84px;gap:16px;align-items:center;padding:13px 10px;border-top:1px solid var(--border)}
+.skeleton-cell{display:flex;flex-direction:column;gap:8px;min-width:0}
+.skeleton{display:block;height:11px;border-radius:6px;background:linear-gradient(90deg,var(--track) 30%,var(--hover) 50%,var(--track) 70%);background-size:250% 100%;animation:shimmer 1.6s ease-in-out infinite}
+.skeleton.thin{height:9px;opacity:.75}
+.skeleton.box{width:14px;height:14px;border-radius:4px}
+.skeleton.button{height:30px;border-radius:8px}
+.skeleton.s-size{width:80%;justify-self:end}
+.skeleton.s-date{width:85%}
+.v0 .s-name{width:82%}.v0 .s-code{width:38%}.v0 .s-title{width:72%}.v0 .s-circle{width:34%}
+.v1 .s-name{width:68%}.v1 .s-code{width:42%}.v1 .s-title{width:88%}.v1 .s-circle{width:46%}
+.v2 .s-name{width:90%}.v2 .s-code{width:36%}.v2 .s-title{width:60%}.v2 .s-circle{width:28%}
+.v3 .s-name{width:74%}.v3 .s-code{width:40%}.v3 .s-title{width:79%}.v3 .s-circle{width:40%}
+.tree-skeleton{display:grid;gap:14px;padding:8px 10px}
+.tree-skeleton .skeleton.year{width:55%;height:13px}
+.tree-skeleton .skeleton.month{width:70%;margin-left:20px}
+.tree-skeleton .skeleton.month:nth-child(odd){width:58%}
+@keyframes shimmer{from{background-position:100% 0}to{background-position:0 0}}
+@media(prefers-reduced-motion:reduce){.skeleton{animation:none}}

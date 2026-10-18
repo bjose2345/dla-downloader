@@ -10,6 +10,7 @@ import type {
   FolderFile,
   FolderSummary,
   LibraryView,
+  RecentFile,
   RequestedFile,
   SessionView,
 } from "./types";
@@ -24,6 +25,9 @@ export const gateway = {
   libraryFolders: () => invoke<FolderSummary[]>("library_folders"),
   librarySearch: (query: string) => invoke<CatalogEntry[]>("library_search", { query }),
   libraryFolder: (name: string) => invoke<FolderFile[]>("library_folder", { name }),
+  libraryRecent: (days: number) => invoke<RecentFile[]>("library_recent", { days }),
+  libraryAddedMonths: (offset: number) => invoke<FolderSummary[]>("library_added_months", { offset }),
+  libraryAdded: (month: string, offset: number) => invoke<RecentFile[]>("library_added", { month, offset }),
   libraryRefresh: (thorough: boolean) => invoke<LibraryView>("library_refresh", { thorough }),
   downloadFiles: (files: RequestedFile[]) => invoke<LibraryView>("download_files", { files }),
   pauseDownload: (id: string) => invoke<LibraryView>("pause_download", { id }),

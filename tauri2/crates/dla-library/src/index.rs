@@ -22,7 +22,8 @@ use crate::{
 
 pub const MANIFEST_NAME: &str = "_manifest.json";
 // 2: entries carry update and release dates, so older caches are read again.
-const CACHE_VERSION: u32 = 2;
+// 3: entries carry when dlminer added each file (`added_date`).
+const CACHE_VERSION: u32 = 3;
 const MAX_MANIFEST_BYTES: u64 = 256 << 20;
 // The download service lets an account read one file at a time.
 const PARALLEL_FETCHES: usize = 1;

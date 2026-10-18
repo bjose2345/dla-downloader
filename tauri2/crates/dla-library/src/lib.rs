@@ -2,6 +2,7 @@
 //! `_manifest.json` files, local search over it, and resumable downloads that
 //! are verified against the manifest's SHA-256 before they are kept.
 
+mod arrivals;
 mod catalog;
 mod download;
 mod index;
@@ -11,7 +12,8 @@ use std::{thread, time::Duration};
 use dla_remote::RemoteError;
 use dla_remote::{ArchiveClient, Fetched, RangeChunk, RemoteEntry};
 
-pub use catalog::{Catalog, CatalogEntry, FolderSummary, parse_manifest};
+pub use arrivals::{month_of, month_range, now_seconds, server_time_seconds};
+pub use catalog::{Catalog, CatalogEntry, FolderSummary, Recent, parse_manifest};
 pub use download::{
     DownloadActivity, DownloadError, DownloadJob, DownloadOptions, DownloadSink, Downloaded,
     KnownFile, KnownFiles, PART_SUFFIX, download, existing_copy, local_name,

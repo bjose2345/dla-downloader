@@ -1,5 +1,5 @@
 import type { LocaleId, Translate } from "../i18n/catalogs";
-import type { CatalogEntry, DownloadView, FolderFile, FolderSummary } from "../backend/types";
+import type { CatalogEntry, DownloadView, FolderFile, FolderSummary, RecentFile } from "../backend/types";
 
 export interface YearGroup {
   /** A year, "undated" or "other"; the page translates the last two. */
@@ -184,4 +184,136 @@ export function summaryText(
   if (!parts.length && newlySaved) parts.push(t("summary.saved"));
   else if (!parts.length && newlyFound) parts.push(t("summary.alreadyInFolder"));
   return parts.length ? parts.join(" · ") : null;
+}
+
+/** When a recent file reached the archive, in ms; 0 when the server's time is unreadable. */
+export function arrivedAt(file: RecentFile): number {
+  return Date.parse(file.arrived) || 0;
+}
+
+/** One row of "Latest added": a copy of a work, with every part of a split set. */
+export interface RecentCopy {
+  /** The month folder and the copy's id. */
+  key: string;
+  /** The first part, which names the work for the whole set. */
+  lead: RecentFile;
+  /** The copy's files, in part order. */
+  files: RecentFile[];
+  /** When its newest part arrived, in ms. */
+  arrived: number;
+  size: number;
+}
+
+/** Joins the parts of each split set into one row, newest first. */
+export function recentCopies(files: RecentFile[]): RecentCopy[] {
+  const copies = new Map<string, RecentFile[]>();
+  for (const file of files) {
+    // The work code too, so two works can never share a row.
+    const key = `${file.folder}/${file.name.split("__")[0]}/${copyKey(recentCopy(file))}`;
+    copies.set(key, [...(copies.get(key) ?? []), file]);
+  }
+  return [...copies.entries()]
+    .flatMap(([key, parts]) => {
+      const sorted = [...parts].sort((left, right) => left.name.localeCompare(right.name, undefined, { numeric: true }));
+      const lead = sorted[0];
+      return lead
+        ? [{ key, lead, files: sorted, arrived: Math.max(...parts.map(arrivedAt)), size: parts.reduce((sum, file) => sum + file.size, 0) }]
+        : [];
+    })
+    .sort((left, right) => right.arrived - left.arrived || left.key.localeCompare(right.key));
+}
+
+/** The copies that arrived on one local calendar day. */
+export interface ArrivalDay {
+  /** `YYYY-MM-DD` in local time. */
+  key: string;
+  /** Local midnight of that day. */
+  date: Date;
+  /** 0 for today, 1 for yesterday… */
+  daysAgo: number;
+  copies: RecentCopy[];
+}
+
+/** Groups copies, already newest first, by the local day they arrived. */
+export function arrivalDays(copies: RecentCopy[], now: Date): ArrivalDay[] {
+  const midnight = (time: Date) => new Date(time.getFullYear(), time.getMonth(), time.getDate());
+  const pad = (part: number) => String(part).padStart(2, "0");
+  const today = midnight(now).getTime();
+  const days: ArrivalDay[] = [];
+  for (const copy of copies) {
+    const date = midnight(new Date(copy.arrived));
+    const key = `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+    let day = days.at(-1);
+    if (day?.key !== key) {
+      // Rounded, so a day with a daylight-saving change still counts as one.
+      day = { key, date, daysAgo: Math.round((today - date.getTime()) / 86_400_000), copies: [] };
+      days.push(day);
+    }
+    day.copies.push(copy);
+  }
+  return days;
+}
+
+/** "Today · Sun 18 Oct", "Yesterday · Sat 17 Oct", "Fri 16 Oct". */
+export function arrivalDayLabel(t: Translate, day: ArrivalDay, locale: LocaleId): string {
+  const date = day.date.toLocaleDateString(locale, { weekday: "short", day: "numeric", month: "short" });
+  if (day.daysAgo === 0) return t("library.recentToday", { date });
+  if (day.daysAgo === 1) return t("library.recentYesterday", { date });
+  return date;
+}
+
+/** What the user has seen of "Latest added", kept between sessions. */
+export interface ArrivalsSeen {
+  /** When "Latest added" was last open, ms since 1970; null before the first time. */
+  openedAt: number | null;
+  /** Recent files whose New mark was cleared. */
+  seen: string[];
+}
+
+/** A copy is new until every one of its parts was seen. */
+export function isNewCopy(copy: RecentCopy, seen: Set<string>): boolean {
+  return copy.files.some((file) => !seen.has(file.path));
+}
+
+/** The switch's badge: unseen copies that arrived since "Latest added" was last open. */
+export function newSinceOpened(copies: RecentCopy[], state: ArrivalsSeen): number {
+  const seen = new Set(state.seen);
+  return copies.filter((copy) => isNewCopy(copy, seen) && (state.openedAt === null || copy.arrived > state.openedAt)).length;
+}
+
+export function recentCopy(file: RecentFile): Copy {
+  return { path: file.path, name: file.name, workId: file.workId, version: file.version, updated: file.updated, released: file.released };
+}
+
+/** How far back "Latest added" can look, in days. */
+export const LATEST_DAYS = [1, 3, 7, 14, 30] as const;
+
+/** The `YYYY-MM` folder an archive path is in. */
+export function fileFolder(path: string): string {
+  return path.split("/").at(-2) ?? "";
+}
+
+/** A file of "Date added" as a month listing row, dated by its arrival. */
+export function recentFolderFile(file: RecentFile): FolderFile {
+  return {
+    name: file.name,
+    path: file.path,
+    size: file.size,
+    modified: file.arrived,
+    workId: file.workId,
+    title: file.title,
+    circle: file.circle,
+    version: file.version,
+    updated: file.updated,
+    released: file.released,
+    checked: file.checked,
+  };
+}
+
+/** `2026-10` → `October 2026`, in the chosen language. */
+export function addedMonthLabel(name: string, locale: LocaleId = "en-US"): string {
+  const match = MONTH.exec(name);
+  if (!match) return name;
+  const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, 1));
+  return date.toLocaleString(locale, { month: "long", year: "numeric", timeZone: "UTC" });
 }

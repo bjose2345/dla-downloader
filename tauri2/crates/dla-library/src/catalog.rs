@@ -1,11 +1,14 @@
 use std::{
-    collections::{BTreeMap, BTreeSet},
+    collections::{BTreeMap, BTreeSet, HashMap, HashSet},
     ops::Range,
 };
 
 use serde::{Deserialize, Serialize};
 
-use crate::ARCHIVE_ROOT;
+use crate::{
+    ARCHIVE_ROOT,
+    arrivals::{month_of, month_range, server_time_seconds},
+};
 
 /// One archive file described by its month's manifest.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -25,6 +28,10 @@ pub struct CatalogEntry {
     /// The work's release date, `YYYY-MM-DD`, or empty.
     #[serde(default)]
     pub released: String,
+    /// When dlminer added the file to the archive (RFC 3339, UTC), or empty
+    /// in manifests written before it recorded that.
+    #[serde(default)]
+    pub added: String,
     pub size: u64,
     pub sha256: Option<String>,
 }
@@ -55,6 +62,7 @@ struct ManifestFile {
     version: Option<String>,
     creation_date: Option<String>,
     updated_date: Option<String>,
+    added_date: Option<String>,
     size: Option<u64>,
     hashes: Option<Hashes>,
 }
@@ -83,6 +91,7 @@ pub fn parse_manifest(folder: &str, data: &[u8]) -> Option<Vec<CatalogEntry>> {
                 version: text(file.version),
                 updated: day(file.updated_date),
                 released: day(file.creation_date),
+                added: text(file.added_date),
                 size: file.size.unwrap_or(0),
                 sha256: file
                     .hashes
@@ -128,6 +137,15 @@ pub struct FolderSummary {
     pub manifest: bool,
 }
 
+/// A file found by when dlminer added it to the archive.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Recent<'a> {
+    pub entry: &'a CatalogEntry,
+    /// The archive already had another copy of this work, so this one is a
+    /// newer version rather than a new work.
+    pub update: bool,
+}
+
 /// All manifest entries of the archive, searchable in memory. A full archive
 /// holds tens of thousands of entries, which a linear scan answers in
 /// milliseconds without a separate search engine.
@@ -137,6 +155,8 @@ pub struct Catalog {
     keys: Vec<Keys>,
     folders: BTreeMap<String, Range<usize>>,
     without_manifest: BTreeSet<String>,
+    /// Entries with a date added, as `(time, index)`, newest first.
+    arrivals: Vec<(i64, usize)>,
 }
 
 impl Catalog {
@@ -167,12 +187,96 @@ impl Catalog {
                 file_name: fold(&entry.file_name),
             })
             .collect();
+        let mut arrivals: Vec<(i64, usize)> = entries
+            .iter()
+            .enumerate()
+            .filter_map(|(index, entry)| Some((server_time_seconds(&entry.added)?, index)))
+            .collect();
+        arrivals.sort_by(|(left_time, left), (right_time, right)| {
+            right_time.cmp(left_time).then_with(|| left.cmp(right))
+        });
         Self {
             entries,
             keys,
             folders: ranges,
             without_manifest: BTreeSet::new(),
+            arrivals,
         }
+    }
+
+    /// Files added at or after `since` (seconds since 1970), newest first.
+    pub fn arrived_since(&self, since: i64) -> Vec<Recent<'_>> {
+        self.arrived_between(since, i64::MAX)
+    }
+
+    /// How many files were added in each month, as `YYYY-MM` folders of a
+    /// tree.
+    /// `offset` (seconds east of UTC) puts the month boundaries at the
+    /// viewer's midnight.
+    pub fn added_months(&self, offset: i64) -> Vec<FolderSummary> {
+        let mut months: BTreeMap<String, usize> = BTreeMap::new();
+        for (time, _) in &self.arrivals {
+            *months.entry(month_of(time + offset)).or_default() += 1;
+        }
+        months
+            .into_iter()
+            .map(|(name, files)| FolderSummary {
+                name,
+                files,
+                manifest: true,
+            })
+            .collect()
+    }
+
+    /// Files added in a `YYYY-MM` month (see [`Self::added_months`]), newest
+    /// first.
+    pub fn added_in(&self, month: &str, offset: i64) -> Vec<Recent<'_>> {
+        month_range(month).map_or_else(Vec::new, |(start, end)| {
+            self.arrived_between(start - offset, end - offset)
+        })
+    }
+
+    /// Files added from `start` up to, not including, `end`, newest first.
+    fn arrived_between(&self, start: i64, end: i64) -> Vec<Recent<'_>> {
+        let found: Vec<(i64, &CatalogEntry)> = self
+            .arrivals
+            .iter()
+            .skip_while(|(time, _)| *time >= end)
+            .take_while(|(time, _)| *time >= start)
+            .map(|(time, index)| (*time, &self.entries[*index]))
+            .collect();
+        let works: HashSet<&str> = found
+            .iter()
+            .map(|(_, entry)| entry.work_id.as_str())
+            .filter(|work| !work.is_empty())
+            .collect();
+        // When the first part of each copy of those works was added; `None`
+        // for a copy without a date, which counts as having been there before.
+        let mut copies: HashMap<&str, HashMap<&str, Option<i64>>> = HashMap::new();
+        for entry in self
+            .entries
+            .iter()
+            .filter(|entry| works.contains(entry.work_id.as_str()))
+        {
+            let time = server_time_seconds(&entry.added);
+            copies
+                .entry(entry.work_id.as_str())
+                .or_default()
+                .entry(copy_key(&entry.file_name))
+                .and_modify(|first| *first = first.zip(time).map(|(left, right)| left.min(right)))
+                .or_insert(time);
+        }
+        found
+            .into_iter()
+            .map(|(time, entry)| {
+                let own = copy_key(&entry.file_name);
+                let update = copies.get(entry.work_id.as_str()).is_some_and(|keys| {
+                    keys.iter()
+                        .any(|(key, first)| *key != own && first.is_none_or(|first| first < time))
+                });
+                Recent { entry, update }
+            })
+            .collect()
     }
 
     /// Marks folders that have no readable manifest, so the tree can say
@@ -278,6 +382,13 @@ fn word_score(keys: &Keys, word: &str) -> Option<u32> {
     } else {
         None
     }
+}
+
+/// Which copy of a work a stored file is: `<code>__<id>.<ext>` by its id, so
+/// the parts of a split set share one.
+fn copy_key(name: &str) -> &str {
+    let id = name.split_once("__").map_or(name, |(_, id)| id);
+    id.split('.').next().unwrap_or(id)
 }
 
 /// Lower-cases and maps full-width ASCII (as typed with a Japanese input
@@ -399,6 +510,89 @@ mod tests {
                 .dated(),
             ""
         );
+    }
+
+    #[test]
+    fn lists_files_by_date_added_and_tells_updates_from_new_works() {
+        let manifest = r#"{"files": {
+          "RJ1__old.zip": {"work_id": "RJ1", "title": "Older work", "added_date": "2026-06-01T10:00:00Z"},
+          "RJ1__new.zip": {"work_id": "RJ1", "title": "Older work", "updated_date": "2026-10-12", "version": "1.2", "added_date": "2026-10-18T09:14:00Z"},
+          "RJ2__a.part1.exe": {"work_id": "RJ2", "added_date": "2026-10-17T08:00:00Z"},
+          "RJ2__a.part2.rar": {"work_id": "RJ2", "added_date": "2026-10-17T08:01:00Z"},
+          "RJ3__x.zip": {"work_id": "RJ3", "added_date": "2026-10-16T12:00:00Z"},
+          "RJ3__y.zip": {"work_id": "RJ3", "added_date": "2026-10-16T12:00:00Z"},
+          "RJ4__before.zip": {"work_id": "RJ4"},
+          "RJ4__later.zip": {"work_id": "RJ4", "added_date": "2026-10-16T07:00:00Z"},
+          "RJ9__unreadable.zip": {"work_id": "RJ9", "added_date": "yesterday"}
+        }}"#;
+        let catalog = Catalog::new(
+            ["2026-10".to_owned()],
+            parse_manifest("2026-10", manifest.as_bytes()).unwrap(),
+        );
+        assert_eq!(
+            catalog.entry("2026-10", "RJ1__new.zip").unwrap().added,
+            "2026-10-18T09:14:00Z"
+        );
+        let since = server_time_seconds("2026-10-11T09:14:00Z").unwrap();
+        let recent: Vec<_> = catalog
+            .arrived_since(since)
+            .into_iter()
+            .map(|recent| (recent.entry.file_name.as_str(), recent.update))
+            .collect();
+        assert_eq!(
+            recent,
+            [
+                // Another copy was already in the archive.
+                ("RJ1__new.zip", true),
+                // The second part of the same copy is not an update.
+                ("RJ2__a.part2.rar", false),
+                ("RJ2__a.part1.exe", false),
+                // Copies added together are both new.
+                ("RJ3__x.zip", false),
+                ("RJ3__y.zip", false),
+                // A copy without a date counts as having been there before.
+                ("RJ4__later.zip", true),
+            ]
+        );
+        assert!(catalog.arrived_since(i64::MAX).is_empty());
+
+        // Months by date added, with the boundaries at the viewer's midnight.
+        let months = |offset: i64| -> Vec<(String, usize)> {
+            catalog
+                .added_months(offset)
+                .into_iter()
+                .map(|month| (month.name, month.files))
+                .collect()
+        };
+        assert_eq!(
+            months(0),
+            [("2026-06".to_owned(), 1), ("2026-10".to_owned(), 6)]
+        );
+        // Ten hours west of UTC, 07:00 on 16 October is still the 15th, and
+        // 10:00 on 1 June is midnight of the 1st; nothing moves across a month.
+        assert_eq!(months(-10 * 3600), months(0));
+        assert_eq!(months(15 * 3600)[0], ("2026-06".to_owned(), 1));
+        let june: Vec<_> = catalog
+            .added_in("2026-06", 0)
+            .into_iter()
+            .map(|recent| (recent.entry.file_name.as_str(), recent.update))
+            .collect();
+        // The original copy is not an update, though a newer one came later.
+        assert_eq!(june, [("RJ1__old.zip", false)]);
+        assert_eq!(catalog.added_in("2026-10", 0).len(), 6);
+        assert!(catalog.added_in("2026-07", 0).is_empty());
+        assert!(catalog.added_in("not a month", 0).is_empty());
+        // Twelve hours west, 09:14 UTC on 1 November is still October.
+        let late = Catalog::new(
+            ["2026-10".to_owned()],
+            parse_manifest(
+                "2026-10",
+                br#"{"files": {"RJ5__z.zip": {"work_id": "RJ5", "added_date": "2026-11-01T09:14:00Z"}}}"#,
+            )
+            .unwrap(),
+        );
+        assert_eq!(late.added_in("2026-10", -12 * 3600).len(), 1);
+        assert_eq!(late.added_in("2026-11", 0).len(), 1);
     }
 
     #[test]

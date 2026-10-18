@@ -13,7 +13,7 @@ use std::{
 use dla_library::{
     ARCHIVE_ROOT, Catalog, CatalogEntry, DownloadActivity, DownloadError, DownloadJob,
     DownloadOptions, DownloadSink, FolderSummary, IndexProgress, IndexStore, KnownFile, KnownFiles,
-    MANIFEST_NAME, RefreshOptions, RefreshSummary, download, existing_copy,
+    MANIFEST_NAME, Recent, RefreshOptions, RefreshSummary, download, existing_copy, now_seconds,
 };
 use dla_remote::{ArchiveClient, Credentials, Endpoint, PauseSignal, RemoteError, RemoteErrorKind};
 use serde::{Deserialize, Serialize};
@@ -278,6 +278,53 @@ pub struct FolderFile {
     pub checked: bool,
 }
 
+/// A file with when it reached the archive, for "Date added" and
+/// "Latest added".
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RecentFile {
+    /// The month folder, which follows the work's release date.
+    pub folder: String,
+    pub name: String,
+    pub path: String,
+    pub size: u64,
+    /// When dlminer added the file to the archive (RFC 3339).
+    pub arrived: String,
+    pub work_id: Option<String>,
+    pub title: Option<String>,
+    pub circle: Option<String>,
+    pub version: Option<String>,
+    pub updated: Option<String>,
+    pub released: Option<String>,
+    pub checked: bool,
+    /// A newer copy of a work the archive already had.
+    pub update: bool,
+}
+
+/// A time zone offset in minutes, within the ones in use, as seconds.
+fn offset_seconds(minutes: i32) -> i64 {
+    i64::from(minutes.clamp(-14 * 60, 14 * 60)) * 60
+}
+
+fn recent_file(recent: Recent<'_>) -> RecentFile {
+    let entry = recent.entry;
+    RecentFile {
+        folder: entry.folder.clone(),
+        name: entry.file_name.clone(),
+        path: entry.path.clone(),
+        size: entry.size,
+        arrived: entry.added.clone(),
+        work_id: Some(entry.work_id.clone()),
+        title: Some(entry.title.clone()),
+        circle: Some(entry.circle.clone()),
+        version: Some(entry.version.clone()),
+        updated: Some(entry.updated.clone()),
+        released: Some(entry.released.clone()),
+        checked: entry.sha256.is_some(),
+        update: recent.update,
+    }
+}
+
 /// An archive file the interface asks to download.
 #[derive(Debug, Clone, Deserialize)]
 pub struct RequestedFile {
@@ -492,6 +539,32 @@ impl Library {
             .search(query, SEARCH_LIMIT)
             .into_iter()
             .cloned()
+            .collect()
+    }
+
+    /// What was added to the archive in the last `days` days (1 to 31),
+    /// newest first, as the latest catalog refresh saw it.
+    pub fn recent(&self, days: u32) -> Vec<RecentFile> {
+        let since = now_seconds() - i64::from(days.clamp(1, 31)) * 86_400;
+        self.catalog()
+            .arrived_since(since)
+            .into_iter()
+            .map(recent_file)
+            .collect()
+    }
+
+    /// How many files were added in each month; `offset` is the viewer's
+    /// minutes east of UTC, so months start at their midnight.
+    pub fn added_months(&self, offset: i32) -> Vec<FolderSummary> {
+        self.catalog().added_months(offset_seconds(offset))
+    }
+
+    /// The files added in a `YYYY-MM` month, newest first.
+    pub fn added(&self, month: &str, offset: i32) -> Vec<RecentFile> {
+        self.catalog()
+            .added_in(month, offset_seconds(offset))
+            .into_iter()
+            .map(recent_file)
             .collect()
     }
 
