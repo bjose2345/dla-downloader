@@ -6,6 +6,7 @@ mod arrivals;
 mod catalog;
 mod download;
 mod index;
+mod split;
 
 use std::{thread, time::Duration};
 
@@ -21,6 +22,7 @@ pub use download::{
 pub use index::{
     IndexProgress, IndexStore, MANIFEST_NAME, ManifestState, RefreshOptions, RefreshSummary,
 };
+pub use split::split_part;
 
 /// The archive root the download service serves.
 pub const ARCHIVE_ROOT: &str = "/dlsite";

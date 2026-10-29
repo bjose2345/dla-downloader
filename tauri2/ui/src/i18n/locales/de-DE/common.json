@@ -201,6 +201,7 @@
   "downloads.lead": "Einer nach dem anderen · wird nach Unterbrechungen fortgesetzt",
   "downloads.clearFinished": "Fertige entfernen",
   "downloads.progressLabel": "Downloadfortschritt für {name}",
+  "downloads.partOf": "Teil {part} von {total}",
   "downloads.sizeOf": "{received} von {total}",
   "downloads.pause": "Pausieren",
   "downloads.resume": "Fortsetzen",

@@ -676,6 +676,39 @@ fn a_different_file_of_the_same_size_is_not_taken_for_the_download() {
 }
 
 #[test]
+fn a_part_saved_beside_another_copy_keeps_its_part_name_and_is_found_again() {
+    let archive = FakeArchive::default();
+    let data = b"0123456789abcdef!";
+    archive.put("2026-10", "t1", "RJ2__a.part2.rar", data);
+    let directory = tempfile::tempdir().unwrap();
+    let job = DownloadJob::new(
+        "/dlsite/2026-10/RJ2__a.part2.rar",
+        directory.path(),
+        "RJ2__a.part2.rar",
+        data.len() as u64,
+        Some(hex::encode(Sha256::digest(data))),
+    );
+    fs::write(
+        directory.path().join("RJ2__a.part2.rar"),
+        b"0123456789ABCDEF!",
+    )
+    .unwrap();
+    let pause = PauseSignal::default();
+    assert_eq!(
+        existing_copy(&job, &Known::default(), &pause, &Recorder::default()),
+        Ok(None)
+    );
+
+    // RAR finds a set's volumes by name, so the number goes before ".part2".
+    let done = download(&archive, &job, &options(), &pause, &Recorder::default()).unwrap();
+    assert_eq!(done.path, directory.path().join("RJ2__a (1).part2.rar"));
+    assert_eq!(
+        existing_copy(&job, &Known::default(), &pause, &Recorder::default()),
+        Ok(Some(done.path))
+    );
+}
+
+#[test]
 fn a_changed_copy_is_read_again() {
     let archive = FakeArchive::default();
     let (directory, job) = work(&archive, b"0123456789abcdef!");

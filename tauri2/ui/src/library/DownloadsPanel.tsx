@@ -5,9 +5,9 @@ import { useEffect, useRef, useState } from "react";
 import { downloadStatusText, libraryNoticeText } from "../shared/copy";
 import { remainingLabel, sizeLabel } from "../shared/format";
 import { gateway } from "../backend/gateway";
-import { summaryText } from "./library";
+import { downloadGroups, summaryText } from "./library";
 import { usePresentation } from "../preferences/PresentationProvider";
-import type { LibraryView } from "../backend/types";
+import type { DownloadState, LibraryView } from "../backend/types";
 
 interface Props {
   view: LibraryView;
@@ -80,16 +80,27 @@ export function DownloadsPanel({ view, run }: Props) {
             )}
           </div>
           <AnimatePresence initial={false}>
-            {downloads.map((download) => {
-              const remaining = download.size - download.received;
-              const rate = download.state === "running" && download.bytesPerSecond > 0 ? download.bytesPerSecond : 0;
+            {downloadGroups(downloads).map((group) => {
+              const { current, items, lead } = group;
+              const parts = items.length;
+              const remaining = group.size - group.received;
+              const rate = group.state === "running" && current.bytesPerSecond > 0 ? current.bytesPerSecond : 0;
               const eta = rate ? remainingLabel(t, remaining, rate) : null;
-              const values = { received: sizeLabel(download.received), total: sizeLabel(download.size) };
+              const values = { received: sizeLabel(group.received), total: sizeLabel(group.size) };
+              // A set found whole in the folder says so; one found in part was still saved there.
+              const status = downloadStatusText(t, { ...current, state: group.state, verified: group.verified, existing: group.existing });
+              const problem = items.find((item) => item.state === "failed" && item.notice)?.notice ?? null;
+              const name = parts > 1 ? lead.set?.split("/").pop() ?? lead.fileName : lead.fileName;
+              // A set's buttons act on each of its parts in turn.
+              const each = (states: DownloadState[], command: (id: string) => Promise<LibraryView>) =>
+                run(items
+                  .filter((item) => states.includes(item.state))
+                  .reduce<Promise<LibraryView>>((previous, item) => previous.then(() => command(item.id)), Promise.resolve(view)));
               return (
                 <motion.div
                   className="download-row"
-                  data-state={download.state}
-                  key={download.id}
+                  data-state={group.state}
+                  key={group.key}
                   layout
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: "auto" }}
@@ -98,46 +109,50 @@ export function DownloadsPanel({ view, run }: Props) {
                 >
                   <div className="download-main">
                     <div className="file-name">
-                      {download.workId && <span className="work-code">{download.workId}</span>}
-                      {download.title || download.fileName}
+                      {lead.workId && <span className="work-code">{lead.workId}</span>}
+                      {lead.title || name}
                     </div>
-                    <div className="file-meta">
-                      {download.fileName} → {download.directory}
+                    <div className="file-meta" title={parts > 1 ? items.map((item) => item.fileName).join("\n") : undefined}>
+                      {name}
+                      {parts > 1 ? ` · ${count("count.parts", parts)}` : ""} → {lead.directory}
                     </div>
-                    {download.state !== "done" && (
+                    {group.state !== "done" && (
                       <progress
-                        max={Math.max(1, download.size)}
-                        value={download.received}
-                        aria-label={t("downloads.progressLabel", { name: download.fileName })}
+                        max={Math.max(1, group.size)}
+                        value={group.received}
+                        aria-label={t("downloads.progressLabel", { name })}
                         aria-valuetext={t("downloads.sizeOf", values)}
                       />
                     )}
-                    {download.notice && download.state === "failed" && (
-                      <div className="download-problem">{libraryNoticeText(t, download.notice)}</div>
+                    {problem && group.state === "failed" && (
+                      <div className="download-problem">{libraryNoticeText(t, problem)}</div>
                     )}
                   </div>
                   <div className="download-status">
-                    <span>{downloadStatusText(t, download)}</span>
+                    <span>
+                      {status}
+                      {parts > 1 && group.state !== "done" ? ` · ${t("downloads.partOf", { part: group.part, total: parts })}` : ""}
+                    </span>
                     <span className="muted">
-                      {download.state === "done" ? sizeLabel(download.size) : t("downloads.sizeOf", values)}
+                      {group.state === "done" ? sizeLabel(group.size) : t("downloads.sizeOf", values)}
                       {rate ? ` · ${sizeLabel(rate)}/s` : ""}
                       {eta ? ` · ${eta}` : ""}
                     </span>
                   </div>
                   <div className="download-actions">
-                    {(download.state === "running" || download.state === "queued") && (
-                      <button type="button" className="secondary compact" onClick={() => run(gateway.pauseDownload(download.id))}>
+                    {(group.state === "running" || group.state === "queued") && (
+                      <button type="button" className="secondary compact" onClick={() => each(["running", "queued"], gateway.pauseDownload)}>
                         <Pause size={14} aria-hidden="true" /> {t("downloads.pause")}
                       </button>
                     )}
-                    {(download.state === "paused" || download.state === "failed") && (
-                      <button type="button" className="secondary compact" onClick={() => run(gateway.resumeDownload(download.id))}>
-                        {download.state === "failed" ? <RotateCw size={14} aria-hidden="true" /> : <Play size={14} aria-hidden="true" />}{" "}
-                        {download.state === "failed" ? t("downloads.retry") : t("downloads.resume")}
+                    {(group.state === "paused" || group.state === "failed") && (
+                      <button type="button" className="secondary compact" onClick={() => each(["paused", "failed"], gateway.resumeDownload)}>
+                        {group.state === "failed" ? <RotateCw size={14} aria-hidden="true" /> : <Play size={14} aria-hidden="true" />}{" "}
+                        {group.state === "failed" ? t("downloads.retry") : t("downloads.resume")}
                       </button>
                     )}
-                    {download.state === "done" && (
-                      <button type="button" className="secondary compact" onClick={() => void gateway.showDownload(download.id)}>
+                    {group.state === "done" && (
+                      <button type="button" className="secondary compact" onClick={() => void gateway.showDownload(lead.id)}>
                         <FolderOpen size={14} aria-hidden="true" /> {t("downloads.showInFolder")}
                       </button>
                     )}
@@ -145,12 +160,12 @@ export function DownloadsPanel({ view, run }: Props) {
                       type="button"
                       className="icon-button small"
                       aria-label={
-                        download.state === "done"
-                          ? t("downloads.removeLabel", { name: download.fileName })
-                          : t("downloads.cancelLabel", { name: download.fileName })
+                        group.state === "done"
+                          ? t("downloads.removeLabel", { name })
+                          : t("downloads.cancelLabel", { name })
                       }
-                      title={download.state === "done" ? t("downloads.removeTitle") : t("downloads.cancelTitle")}
-                      onClick={() => run(gateway.removeDownload(download.id))}
+                      title={group.state === "done" ? t("downloads.removeTitle") : t("downloads.cancelTitle")}
+                      onClick={() => each(["queued", "running", "paused", "failed", "done"], gateway.removeDownload)}
                     >
                       <X size={15} aria-hidden="true" />
                     </button>

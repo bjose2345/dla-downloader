@@ -201,6 +201,7 @@
   "downloads.lead": "1 件ずつ · 中断しても再開します",
   "downloads.clearFinished": "完了したものを消去",
   "downloads.progressLabel": "{name} のダウンロード状況",
+  "downloads.partOf": "パート {part}/{total}",
   "downloads.sizeOf": "{received} / {total}",
   "downloads.pause": "一時停止",
   "downloads.resume": "再開",

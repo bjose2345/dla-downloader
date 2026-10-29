@@ -13,6 +13,7 @@ import {
   fileCopy,
   fileFolder,
   groupFolders,
+  groupParts,
   monthLabel,
   narrowResults,
   newSinceOpened,
@@ -23,6 +24,7 @@ import {
   yearKey,
   type Copy,
   type CopySummary,
+  type PartGroup,
   type SortKey,
   type YearGroup,
 } from "./library";
@@ -174,11 +176,15 @@ export function LibraryPage({ view, run }: Props) {
     if (requested.length) run(gateway.downloadFiles(requested));
   };
 
-  const toggle = (path: string) =>
+  // A split set is ticked and unticked as a whole.
+  const toggle = (paths: string[]) =>
     setSelected((current) => {
       const next = new Set(current);
-      if (next.has(path)) next.delete(path);
-      else next.add(path);
+      const all = paths.every((path) => next.has(path));
+      for (const path of paths) {
+        if (all) next.delete(path);
+        else next.add(path);
+      }
       return next;
     });
 
@@ -210,7 +216,7 @@ export function LibraryPage({ view, run }: Props) {
       loading={search.isFetching}
       signedIn={view.signedIn}
       onShow={(entry) => showInMonth(entry.folder, entry.fileName)}
-      onDownload={(entry) => download([{ path: entry.path, size: entry.size }])}
+      onDownload={(entries) => download(entries.map((entry) => ({ path: entry.path, size: entry.size })))}
     />
   );
 
@@ -355,7 +361,7 @@ export function LibraryPage({ view, run }: Props) {
                     onSort={sortBy}
                     onToggle={toggle}
                     onToggleAll={(all) => setSelected(all ? new Set(files.map((file) => file.path)) : new Set())}
-                    onDownload={(file) => download([{ path: file.path, size: file.size }])}
+                    onDownload={(parts) => download(parts.map((file) => ({ path: file.path, size: file.size })))}
                     onShowFolder={byAdded ? (file) => showInMonth(fileFolder(file.path), file.name) : undefined}
                   />
                 )}
@@ -479,9 +485,10 @@ interface TableProps {
   /** The date column: a file's time in its folder, or when it arrived. */
   dateKey: "library.colModified" | "library.colAdded";
   onSort: (key: SortKey) => void;
-  onToggle: (path: string) => void;
+  onToggle: (paths: string[]) => void;
   onToggleAll: (all: boolean) => void;
-  onDownload: (file: FolderFile) => void;
+  /** A whole file, or every part of a split set. */
+  onDownload: (files: FolderFile[]) => void;
   /** Adds the Released column, a link to each file's month folder. */
   onShowFolder?: (file: FolderFile) => void;
 }
@@ -489,9 +496,12 @@ interface TableProps {
 function FileTable({ files, highlight, selected, sort, dateKey, onSort, onToggle, onToggleAll, onDownload, onShowFolder }: TableProps) {
   const { t } = usePresentation();
   const copies = useMemo(() => summarizeCopies(files.map(fileCopy)), [files]);
+  const groups = useMemo(() => groupParts(files, (file) => fileFolder(file.path), (file) => file.name, (file) => file.size), [files]);
+  // A part of a split set is shown by its set's row, named after the first part.
+  const shown = highlight ? groups.find((group) => group.files.some((file) => file.name === highlight))?.lead.name ?? highlight : null;
   useEffect(() => {
-    if (highlight) document.getElementById("file-" + highlight)?.scrollIntoView({ block: "center" });
-  }, [highlight, files]);
+    if (shown) document.getElementById("file-" + shown)?.scrollIntoView({ block: "center" });
+  }, [shown, groups]);
   // Rows get handlers that never change, so ticking one file in a month of
   // thousands redraws only that row.
   const latest = useRef({ onToggle, onDownload, onShowFolder });
@@ -500,9 +510,9 @@ function FileTable({ files, highlight, selected, sort, dateKey, onSort, onToggle
   });
   const actions = useMemo<RowActions>(
     () => ({
-      toggle: (file) => latest.current.onToggle(file.path),
-      download: (file) => latest.current.onDownload(file),
-      showFolder: (file) => latest.current.onShowFolder?.(file),
+      toggle: (group) => latest.current.onToggle(group.files.map((file) => file.path)),
+      download: (group) => latest.current.onDownload(group.files),
+      showFolder: (group) => latest.current.onShowFolder?.(group.lead),
     }),
     [],
   );
@@ -537,12 +547,12 @@ function FileTable({ files, highlight, selected, sort, dateKey, onSort, onToggle
           </tr>
         </thead>
         <tbody>
-          {files.map((file) => (
+          {groups.map((group) => (
             <FileRow
-              key={file.path}
-              file={file}
-              highlighted={file.name === highlight}
-              selected={selected.has(file.path)}
+              key={group.key}
+              group={group}
+              highlighted={group.lead.name === shown}
+              selected={group.files.every((file) => selected.has(file.path))}
               copies={copies}
               actions={actions}
               showFolder={onShowFolder !== undefined}
@@ -555,13 +565,13 @@ function FileTable({ files, highlight, selected, sort, dateKey, onSort, onToggle
 }
 
 interface RowActions {
-  toggle: (file: FolderFile) => void;
-  download: (file: FolderFile) => void;
-  showFolder: (file: FolderFile) => void;
+  toggle: (group: PartGroup<FolderFile>) => void;
+  download: (group: PartGroup<FolderFile>) => void;
+  showFolder: (group: PartGroup<FolderFile>) => void;
 }
 
 interface RowProps {
-  file: FolderFile;
+  group: PartGroup<FolderFile>;
   highlighted: boolean;
   selected: boolean;
   copies: CopySummary;
@@ -570,20 +580,26 @@ interface RowProps {
   showFolder: boolean;
 }
 
-const FileRow = memo(function FileRow({ file, highlighted, selected, copies, actions, showFolder }: RowProps) {
-  const { t } = usePresentation();
+const FileRow = memo(function FileRow({ group, highlighted, selected, copies, actions, showFolder }: RowProps) {
+  const { t, count } = usePresentation();
+  const file = group.lead;
+  const parts = group.files.length;
+  const modified = parts > 1
+    ? group.files.reduce<string | null>((latest, part) => (part.modified && (!latest || part.modified > latest) ? part.modified : latest), null)
+    : file.modified;
   return (
     <tr
       id={"file-" + file.name}
       className={(highlighted ? "highlight " : "") + (selected ? "selected" : "")}
-      onDoubleClick={() => actions.download(file)}
+      onDoubleClick={() => actions.download(group)}
     >
       <td className="check">
-        <input type="checkbox" aria-label={t("library.select", { name: file.name })} checked={selected} onChange={() => actions.toggle(file)} />
+        <input type="checkbox" aria-label={t("library.select", { name: file.name })} checked={selected} onChange={() => actions.toggle(group)} />
       </td>
       <td className="name">
-        <span className="file-name">{file.name}</span>
+        <span className="file-name" title={parts > 1 ? group.files.map((part) => part.name).join("\n") : undefined}>{file.name}</span>
         {file.workId && <span className="work-code">{file.workId}</span>}
+        {parts > 1 && <span className="parts-count">{count("count.parts", parts)}</span>}
         <CopyLine copy={fileCopy(file)} copies={copies} />
       </td>
       <td className="title">
@@ -592,18 +608,18 @@ const FileRow = memo(function FileRow({ file, highlighted, selected, copies, act
       </td>
       {showFolder && (
         <td className="month">
-          <button type="button" className="link" title={t("library.showInMonth", { month: fileFolder(file.path) })} onClick={() => actions.showFolder(file)}>
+          <button type="button" className="link" title={t("library.showInMonth", { month: fileFolder(file.path) })} onClick={() => actions.showFolder(group)}>
             {fileFolder(file.path)}
           </button>
         </td>
       )}
-      <td className="size">{sizeLabel(file.size)}</td>
-      <td className="modified">{dateLabel(file.modified)}</td>
+      <td className="size">{sizeLabel(group.size)}</td>
+      <td className="modified">{dateLabel(modified)}</td>
       <td className="actions">
         <button
           type="button"
           className="secondary compact"
-          onClick={() => actions.download(file)}
+          onClick={() => actions.download(group)}
           title={file.checked ? t("library.checksumTitle") : t("library.noChecksumTitle")}
         >
           {t("library.download")}
@@ -618,12 +634,14 @@ interface ResultsProps {
   loading: boolean;
   signedIn: boolean;
   onShow: (entry: CatalogEntry) => void;
-  onDownload: (entry: CatalogEntry) => void;
+  /** A whole file, or every part of a split set. */
+  onDownload: (entries: CatalogEntry[]) => void;
 }
 
 function SearchResults({ results, loading, signedIn, onShow, onDownload }: ResultsProps) {
   const { t, count } = usePresentation();
   const copies = useMemo(() => summarizeCopies(results.map(entryCopy)), [results]);
+  const groups = useMemo(() => groupParts(results, (entry) => entry.folder, (entry) => entry.fileName, (entry) => entry.size), [results]);
   return (
     <>
       <div className="pane-heading">
@@ -634,7 +652,7 @@ function SearchResults({ results, loading, signedIn, onShow, onDownload }: Resul
           ) : results.length >= 200 ? (
             t("library.first200")
           ) : (
-            count("count.matches", results.length)
+            count("count.matches", groups.length)
           )}
         </span>
       </div>
@@ -657,11 +675,12 @@ function SearchResults({ results, loading, signedIn, onShow, onDownload }: Resul
               </tr>
             </thead>
             <tbody>
-              {results.map((entry) => (
-                <tr key={entry.path} onDoubleClick={() => signedIn && onDownload(entry)}>
+              {groups.map(({ key, lead: entry, files, size }) => (
+                <tr key={key} onDoubleClick={() => signedIn && onDownload(files)}>
                   <td className="name">
                     <span className="work-code">{entry.workId || "—"}</span>
-                    <span className="file-name">{entry.fileName}</span>
+                    <span className="file-name" title={files.length > 1 ? files.map((part) => part.fileName).join("\n") : undefined}>{entry.fileName}</span>
+                    {files.length > 1 && <span className="parts-count">{count("count.parts", files.length)}</span>}
                     <CopyLine copy={entryCopy(entry)} copies={copies} />
                   </td>
                   <td className="title">
@@ -673,9 +692,9 @@ function SearchResults({ results, loading, signedIn, onShow, onDownload }: Resul
                       {entry.folder}
                     </button>
                   </td>
-                  <td className="size">{sizeLabel(entry.size)}</td>
+                  <td className="size">{sizeLabel(size)}</td>
                   <td className="actions">
-                    <button type="button" className="secondary compact" disabled={!signedIn} onClick={() => onDownload(entry)}>
+                    <button type="button" className="secondary compact" disabled={!signedIn} onClick={() => onDownload(files)}>
                       {t("library.download")}
                     </button>
                   </td>

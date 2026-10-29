@@ -1,5 +1,5 @@
 use std::{
-    collections::BTreeMap,
+    collections::{BTreeMap, HashSet},
     fs,
     path::{Path, PathBuf},
     sync::{
@@ -14,6 +14,7 @@ use dla_library::{
     ARCHIVE_ROOT, Catalog, CatalogEntry, DownloadActivity, DownloadError, DownloadJob,
     DownloadOptions, DownloadSink, FolderSummary, IndexProgress, IndexStore, KnownFile, KnownFiles,
     MANIFEST_NAME, Recent, RefreshOptions, RefreshSummary, download, existing_copy, now_seconds,
+    split_part,
 };
 use dla_remote::{ArchiveClient, Credentials, Endpoint, PauseSignal, RemoteError, RemoteErrorKind};
 use serde::{Deserialize, Serialize};
@@ -199,6 +200,9 @@ impl Item {
         DownloadView {
             id: saved.id.clone(),
             file_name: saved.job.file_name.clone(),
+            set: archive_file(&saved.job.remote_path).and_then(|(folder, name)| {
+                split_part(name).map(|(set, _)| format!("{folder}/{set}"))
+            }),
             folder: saved.folder.clone(),
             work_id: saved.work_id.clone(),
             title: saved.title.clone(),
@@ -225,6 +229,9 @@ impl Item {
 pub struct DownloadView {
     pub id: String,
     pub file_name: String,
+    /// The split set the file is a part of, `<folder>/<code>__<id>`; the
+    /// Downloads panel shows a set's parts as one row.
+    pub set: Option<String>,
     pub folder: String,
     pub work_id: String,
     pub title: String,
@@ -704,9 +711,37 @@ impl Library {
         Ok(files)
     }
 
-    /// Queues archive files for `directory`, which the user chose.
+    /// Queues archive files for `directory`, which the user chose. A part
+    /// of a split set brings the set's other catalogued parts along, in part
+    /// order, since the set is only usable whole.
     pub fn queue(self: &Arc<Self>, directory: PathBuf, files: Vec<RequestedFile>) -> LibraryView {
         let catalog = self.catalog();
+        // Parts a set already brought in are not asked for twice.
+        let mut in_sets = HashSet::new();
+        let files: Vec<RequestedFile> = files
+            .into_iter()
+            .flat_map(|file| {
+                if in_sets.contains(&file.path) {
+                    return Vec::new();
+                }
+                let parts = archive_file(&file.path)
+                    .map(|(folder, name)| catalog.set_parts(folder, name))
+                    .unwrap_or_default();
+                if parts.len() < 2 {
+                    return vec![file];
+                }
+                parts
+                    .into_iter()
+                    .map(|part| {
+                        in_sets.insert(part.path.clone());
+                        RequestedFile {
+                            path: part.path.clone(),
+                            size: part.size,
+                        }
+                    })
+                    .collect()
+            })
+            .collect();
         let mut inner = self.lock();
         inner.last_directory = Some(directory.clone());
         let mut duplicates = 0;
@@ -1180,6 +1215,50 @@ mod tests {
         assert!(reopened.remove(&id).downloads.is_empty());
         assert!(!target.path().join("RJ1__a.zip.dla-part").exists());
         assert!(open_library(state.path()).view().downloads.is_empty());
+    }
+
+    #[test]
+    fn a_part_of_a_split_set_queues_the_whole_set_in_part_order() {
+        let state = tempfile::tempdir().unwrap();
+        let target = tempfile::tempdir().unwrap();
+        let library = open_library(state.path());
+        let manifest = r#"{"files": {
+          "RJ2__a.part1.exe": {"work_id": "RJ2", "title": "Long game", "size": 1},
+          "RJ2__a.part2.rar": {"work_id": "RJ2", "title": "Long game", "size": 2},
+          "RJ2__a.part3.rar": {"work_id": "RJ2", "title": "Long game", "size": 3}
+        }}"#;
+        *library.catalog.write().unwrap() = Arc::new(Catalog::new(
+            ["2026-10".to_owned()],
+            dla_library::parse_manifest("2026-10", manifest.as_bytes()).unwrap(),
+        ));
+
+        let view = library.queue(
+            target.path().to_owned(),
+            vec![
+                requested("/dlsite/2026-10/RJ2__a.part2.rar"),
+                requested("/dlsite/2026-10/RJ2__a.part3.rar"),
+            ],
+        );
+        let queued: Vec<_> = view
+            .downloads
+            .iter()
+            .map(|download| {
+                (
+                    download.file_name.as_str(),
+                    download.size,
+                    download.set.as_deref(),
+                )
+            })
+            .collect();
+        assert_eq!(
+            queued,
+            [
+                ("RJ2__a.part1.exe", 1, Some("2026-10/RJ2__a")),
+                ("RJ2__a.part2.rar", 2, Some("2026-10/RJ2__a")),
+                ("RJ2__a.part3.rar", 3, Some("2026-10/RJ2__a")),
+            ]
+        );
+        assert!(view.notice.is_none());
     }
 
     #[test]

@@ -1,5 +1,5 @@
 import type { LocaleId, Translate } from "../i18n/catalogs";
-import type { CatalogEntry, DownloadView, FolderFile, FolderSummary, RecentFile } from "../backend/types";
+import type { CatalogEntry, DownloadState, DownloadView, FolderFile, FolderSummary, RecentFile } from "../backend/types";
 
 export interface YearGroup {
   /** A year, "undated" or "other"; the page translates the last two. */
@@ -115,6 +115,96 @@ export function copyLabel(t: Translate, copy: Copy): string | null {
   if (copy.updated) parts.push(t("library.updatedOn", { date: copy.updated }));
   else if (copy.released) parts.push(t("library.releasedOn", { date: copy.released }));
   return parts.length ? parts.join(" · ") : null;
+}
+
+/**
+ * The set a split archive's part belongs to and the part's number:
+ * `RJ1__a.part2.rar` is part 2 of `RJ1__a`, `RJ1__a.zip.003` part 3.
+ * Null for a file that is not a part.
+ */
+export function splitPart(name: string): { set: string; part: number } | null {
+  const rar = /^(.*)\.part(\d+)\.(?:exe|rar)$/i.exec(name);
+  if (rar) return { set: rar[1]!, part: Number(rar[2]) };
+  const numbered = /^(.*)\.(?:zip|7z)\.(\d{3})$/i.exec(name);
+  return numbered ? { set: numbered[1]!, part: Number(numbered[2]) } : null;
+}
+
+/** One row of a file list: a whole file, or every part of a split set. */
+export interface PartGroup<T> {
+  key: string;
+  /** The first part, which names the set. */
+  lead: T;
+  /** The files, in part order. */
+  files: T[];
+  size: number;
+}
+
+/**
+ * Joins the parts of each split set into one row, where its first part
+ * comes in the list; other files keep a row of their own.
+ */
+export function groupParts<T>(
+  items: readonly T[],
+  folder: (item: T) => string,
+  name: (item: T) => string,
+  size: (item: T) => number,
+): PartGroup<T>[] {
+  const groups = new Map<string, T[]>();
+  for (const item of items) {
+    const part = splitPart(name(item));
+    const key = `${folder(item)}/${part ? part.set : name(item)}`;
+    groups.set(key, [...(groups.get(key) ?? []), item]);
+  }
+  return [...groups].map(([key, files]) => {
+    const sorted = files.length > 1
+      ? [...files].sort((left, right) => (splitPart(name(left))?.part ?? 0) - (splitPart(name(right))?.part ?? 0))
+      : files;
+    return { key, lead: sorted[0]!, files: sorted, size: files.reduce((sum, file) => sum + size(file), 0) };
+  });
+}
+
+/** A row of the Downloads panel: one download, or every part of a split set saved to one folder. */
+export interface DownloadGroup {
+  key: string;
+  items: DownloadView[];
+  lead: DownloadView;
+  /** The part the row talks about: the one running, else the first that needs the user. */
+  current: DownloadView;
+  /** 1-based place of `current` among the set's parts. */
+  part: number;
+  state: DownloadState;
+  size: number;
+  received: number;
+  verified: boolean;
+  /** Every part was already in the folder, so none was downloaded. */
+  existing: boolean;
+}
+
+// A set is running while any part runs; a failed part outranks waiting ones.
+const GROUP_STATES: readonly DownloadState[] = ["running", "failed", "paused", "queued", "done"];
+
+export function downloadGroups(downloads: readonly DownloadView[]): DownloadGroup[] {
+  const groups = new Map<string, DownloadView[]>();
+  for (const download of downloads) {
+    const key = download.set ? `${download.set}|${download.directory}` : download.id;
+    groups.set(key, [...(groups.get(key) ?? []), download]);
+  }
+  return [...groups].map(([key, items]) => {
+    const state = GROUP_STATES.find((candidate) => items.some((item) => item.state === candidate)) ?? "done";
+    const current = items.find((item) => item.state === state) ?? items[0]!;
+    return {
+      key,
+      items,
+      lead: items[0]!,
+      current,
+      part: items.indexOf(current) + 1,
+      state,
+      size: items.reduce((sum, item) => sum + item.size, 0),
+      received: items.reduce((sum, item) => sum + (item.state === "done" ? item.size : item.received), 0),
+      verified: items.every((item) => item.verified),
+      existing: items.every((item) => item.existing),
+    };
+  });
 }
 
 export type SortKey = "name" | "size" | "modified" | "title";

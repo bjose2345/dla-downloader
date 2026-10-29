@@ -8,6 +8,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     ARCHIVE_ROOT,
     arrivals::{month_of, month_range, server_time_seconds},
+    split::split_part,
 };
 
 /// One archive file described by its month's manifest.
@@ -324,8 +325,29 @@ impl Catalog {
             .map(|index| &entries[index])
     }
 
+    /// Every catalogued part of the split set a file belongs to, in part
+    /// order; just the file itself when it is not a part.
+    pub fn set_parts(&self, folder: &str, file_name: &str) -> Vec<&CatalogEntry> {
+        let Some((set, _)) = split_part(file_name) else {
+            return self.entry(folder, file_name).into_iter().collect();
+        };
+        let mut parts: Vec<(u32, &CatalogEntry)> = self
+            .in_folder(folder)
+            .iter()
+            .filter_map(|entry| {
+                split_part(&entry.file_name)
+                    .filter(|(other, _)| *other == set)
+                    .map(|(_, number)| (number, entry))
+            })
+            .collect();
+        parts.sort_by_key(|(number, _)| *number);
+        parts.into_iter().map(|(_, entry)| entry).collect()
+    }
+
     /// Ranks matches: an exact work code first, then code prefixes, then
     /// title, circle and file-name matches. Every word must match somewhere.
+    /// A matched part of a split set brings its other parts along, since the
+    /// set is only usable whole.
     pub fn search(&self, query: &str, limit: usize) -> Vec<&CatalogEntry> {
         let query = fold(query);
         let words: Vec<&str> = query.split_whitespace().collect();
@@ -357,10 +379,19 @@ impl Catalog {
                 .then_with(|| right.dated().cmp(left.dated()))
                 .then_with(|| left.file_name.cmp(&right.file_name))
         });
-        hits.into_iter()
-            .take(limit)
-            .map(|(_, entry)| entry)
-            .collect()
+        let mut seen = HashSet::new();
+        let mut found = Vec::new();
+        for (_, entry) in hits.into_iter().take(limit) {
+            for part in self.set_parts(&entry.folder, &entry.file_name) {
+                if seen.insert(part.path.as_str()) {
+                    found.push(part);
+                }
+            }
+            if seen.insert(entry.path.as_str()) {
+                found.push(entry);
+            }
+        }
+        found
     }
 }
 
@@ -458,6 +489,40 @@ mod tests {
         );
         assert_eq!(catalog.in_folder("2024-05"), []);
         assert!(catalog.entry("2013-01", "missing.zip").is_none());
+    }
+
+    #[test]
+    fn a_split_set_is_found_and_listed_whole_in_part_order() {
+        let manifest = r#"{"files": {
+          "RJ2__a.part10.rar": {"work_id": "RJ2", "title": "Long game", "size": 3},
+          "RJ2__a.part1.exe": {"work_id": "RJ2", "title": "Long game", "size": 1},
+          "RJ2__a.part2.rar": {"work_id": "RJ2", "title": "Long game", "size": 2},
+          "RJ2__b.zip": {"work_id": "RJ2", "title": "Long game", "size": 9}
+        }}"#;
+        let catalog = Catalog::new(
+            ["2026-10".to_owned()],
+            parse_manifest("2026-10", manifest.as_bytes()).unwrap(),
+        );
+        let names = |entries: Vec<&CatalogEntry>| -> Vec<String> {
+            entries
+                .into_iter()
+                .map(|entry| entry.file_name.clone())
+                .collect()
+        };
+
+        assert_eq!(
+            names(catalog.set_parts("2026-10", "RJ2__a.part2.rar")),
+            ["RJ2__a.part1.exe", "RJ2__a.part2.rar", "RJ2__a.part10.rar"]
+        );
+        assert_eq!(
+            names(catalog.set_parts("2026-10", "RJ2__b.zip")),
+            ["RJ2__b.zip"]
+        );
+        // Only part 2's name has "part2", and the limit allows one match.
+        assert_eq!(
+            names(catalog.search("part2", 1)),
+            ["RJ2__a.part1.exe", "RJ2__a.part2.rar", "RJ2__a.part10.rar"]
+        );
     }
 
     #[test]

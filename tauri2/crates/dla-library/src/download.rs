@@ -524,10 +524,14 @@ fn place(part: &Path, directory: &Path, name: &str) -> Result<PathBuf, DownloadE
 }
 
 /// `work.zip` → `work (2).zip`; names without an extension get the number
-/// at the end.
+/// at the end. A split set's part keeps its part suffix, `work (2).part1.exe`,
+/// so RAR and 7-Zip still find the set's other parts by name.
 fn numbered(name: &str, number: u32) -> String {
     if number == 0 {
         return name.to_owned();
+    }
+    if let Some((base, _)) = crate::split::split_part(name) {
+        return format!("{base} ({number}){}", &name[base.len()..]);
     }
     match name.rfind('.').filter(|&dot| dot > 0) {
         Some(dot) => format!("{} ({number}){}", &name[..dot], &name[dot..]),
@@ -601,5 +605,7 @@ mod tests {
         assert_eq!(numbered("work.zip", 2), "work (2).zip");
         assert_eq!(numbered("README", 1), "README (1)");
         assert_eq!(numbered(".hidden", 1), ".hidden (1)");
+        assert_eq!(numbered("RJ1__a.part2.rar", 1), "RJ1__a (1).part2.rar");
+        assert_eq!(numbered("RJ1__a.zip.002", 3), "RJ1__a (3).zip.002");
     }
 }

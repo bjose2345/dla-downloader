@@ -8,10 +8,12 @@ import {
   arrivalDays,
   arrivedAt,
   copyLabel,
+  downloadGroups,
   entryCopy,
   fileCopy,
   fileFolder,
   groupFolders,
+  groupParts,
   isWorkCode,
   monthLabel,
   narrowResults,
@@ -19,6 +21,7 @@ import {
   recentCopies,
   recentFolderFile,
   sortFiles,
+  splitPart,
   summarizeCopies,
   summaryText,
   yearKey,
@@ -46,6 +49,7 @@ describe("summaryText", () => {
     verified: false,
     existing: false,
     notice: null,
+    set: null,
   });
 
   it("reports activity, and a new save only once there is nothing else", () => {
@@ -251,3 +255,71 @@ describe("Date added months", () => {
     ]);
   });
 });
+
+describe("split sets", () => {
+  it("reads the set and number of each part, and leaves whole archives alone", () => {
+    expect(splitPart("RJ1__a.part1.exe")).toEqual({ set: "RJ1__a", part: 1 });
+    expect(splitPart("RJ1__a.PART10.RAR")).toEqual({ set: "RJ1__a", part: 10 });
+    expect(splitPart("RJ1__a.zip.003")).toEqual({ set: "RJ1__a", part: 3 });
+    expect(splitPart("RJ1__a.7z.001")).toEqual({ set: "RJ1__a", part: 1 });
+    expect(splitPart("RJ1__a.zip")).toBeNull();
+    expect(splitPart("RJ1__a.exe")).toBeNull();
+    expect(splitPart("RJ1__a.zip.1")).toBeNull();
+  });
+
+  it("lists a set as one row where its first part comes, with its parts in order and their total size", () => {
+    const files = [
+      { folder: "2026-10", name: "RJ2__a.part10.rar", size: 3 },
+      { folder: "2026-10", name: "RJ1__x.zip", size: 9 },
+      { folder: "2026-10", name: "RJ2__a.part1.exe", size: 1 },
+      { folder: "2026-10", name: "RJ2__a.part2.rar", size: 2 },
+      { folder: "2026-09", name: "RJ2__a.part1.exe", size: 5 },
+    ];
+    const groups = groupParts(files, (file) => file.folder, (file) => file.name, (file) => file.size);
+    expect(groups.map((group) => [group.lead.name, group.files.map((file) => file.name), group.size])).toEqual([
+      ["RJ2__a.part1.exe", ["RJ2__a.part1.exe", "RJ2__a.part2.rar", "RJ2__a.part10.rar"], 6],
+      ["RJ1__x.zip", ["RJ1__x.zip"], 9],
+      ["RJ2__a.part1.exe", ["RJ2__a.part1.exe"], 5],
+    ]);
+  });
+
+  it("follows a set's download as one, by the part that needs attention", () => {
+    const part = (id: string, state: DownloadView["state"], received: number, directory = "/dl"): DownloadView => ({
+      id,
+      fileName: `RJ2__a.${id}`,
+      set: "2026-10/RJ2__a",
+      folder: "2026-10",
+      workId: "RJ2",
+      title: "Long game",
+      directory,
+      size: 100,
+      received,
+      state,
+      activity: null,
+      bytesPerSecond: 0,
+      savedPath: null,
+      checked: true,
+      verified: state === "done",
+      existing: false,
+      notice: null,
+    });
+    const [set, elsewhere] = downloadGroups([
+      part("part1.exe", "done", 0),
+      part("part2.rar", "running", 40),
+      part("part3.rar", "queued", 0),
+      part("part1.exe", "queued", 0, "/other"),
+    ]);
+    expect(set!.items).toHaveLength(3);
+    expect([set!.state, set!.current.id, set!.part, set!.received, set!.size, set!.verified]).toEqual(["running", "part2.rar", 2, 140, 300, false]);
+    expect(elsewhere!.items).toHaveLength(1);
+
+    const [failed] = downloadGroups([part("part1.exe", "done", 0), part("part2.rar", "failed", 10), part("part3.rar", "queued", 0)]);
+    expect([failed!.state, failed!.part]).toEqual(["failed", 2]);
+    const [done] = downloadGroups([part("part1.exe", "done", 0), part("part2.rar", "done", 0)]);
+    expect([done!.state, done!.verified, done!.received, done!.existing]).toEqual(["done", true, 200, false]);
+    const found = { ...part("part1.exe", "done", 0), existing: true };
+    expect(downloadGroups([found, part("part2.rar", "done", 0)])[0]!.existing).toBe(false);
+    expect(downloadGroups([found, { ...part("part2.rar", "done", 0), existing: true }])[0]!.existing).toBe(true);
+  });
+});
+

@@ -106,6 +106,8 @@ export type DownloadActivity =
 export interface DownloadView {
   id: string;
   fileName: string;
+  /** The split set the file is a part of, `<folder>/<code>__<id>`; null for a whole file. */
+  set: string | null;
   folder: string;
   workId: string;
   title: string;

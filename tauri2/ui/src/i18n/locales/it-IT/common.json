@@ -201,6 +201,7 @@
   "downloads.lead": "Uno alla volta · riprendono dopo un'interruzione",
   "downloads.clearFinished": "Rimuovi completati",
   "downloads.progressLabel": "Avanzamento del download di {name}",
+  "downloads.partOf": "Parte {part} di {total}",
   "downloads.sizeOf": "{received} di {total}",
   "downloads.pause": "Pausa",
   "downloads.resume": "Riprendi",

@@ -201,6 +201,7 @@
   "downloads.lead": "One at a time · resumes after interruptions",
   "downloads.clearFinished": "Clear finished",
   "downloads.progressLabel": "Download progress for {name}",
+  "downloads.partOf": "Part {part} of {total}",
   "downloads.sizeOf": "{received} of {total}",
   "downloads.pause": "Pause",
   "downloads.resume": "Resume",

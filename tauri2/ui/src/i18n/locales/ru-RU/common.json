@@ -201,6 +201,7 @@
   "downloads.lead": "По одному · продолжаются после прерывания",
   "downloads.clearFinished": "Убрать завершённые",
   "downloads.progressLabel": "Ход скачивания {name}",
+  "downloads.partOf": "Часть {part} из {total}",
   "downloads.sizeOf": "{received} из {total}",
   "downloads.pause": "Пауза",
   "downloads.resume": "Продолжить",

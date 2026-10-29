@@ -118,6 +118,7 @@ describe("library copy", () => {
     const base = {
       id: "a",
       fileName: "RJ1__a.zip",
+      set: null,
       folder: "2013-01",
       workId: "RJ1",
       title: "",
